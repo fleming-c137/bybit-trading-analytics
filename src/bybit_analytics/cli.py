@@ -4,6 +4,8 @@
     python -m bybit_analytics import-csv FILE     # load a Bybit CSV export
     python -m bybit_analytics demo                # generate a synthetic demo database
     python -m bybit_analytics report              # print key findings
+    python -m bybit_analytics serve               # web dashboard on http://localhost:8000
+    python -m bybit_analytics publish             # snapshot for the hosted dashboard
 """
 
 from __future__ import annotations
@@ -86,6 +88,37 @@ def cmd_report(args) -> int:
     return 0
 
 
+def cmd_serve(args) -> int:
+    from .server import serve
+    serve(args.host, args.port, open_browser=not args.no_browser)
+    return 0
+
+
+def cmd_publish(args) -> int:
+    """Write a snapshot of the synced account for the hosted dashboard.
+
+    Your API key is only used locally (by `sync`); the hosted site reads this file.
+    """
+    from datetime import datetime, timezone
+
+    from .report import Dataset, encode_dataset
+    from .webapi import SNAPSHOT_PATH
+    store = _store(args)
+    tx = store.load_transactions()
+    if tx.empty:
+        print("Nothing to publish. Run `sync` first.", file=sys.stderr)
+        return 1
+    tx = tx.assign(order_id="", trade_id="")  # not needed for analysis
+    meta = {"kind": "owner", "label": args.label, "detail": "Published snapshot of a real account",
+            "published_at": datetime.now(timezone.utc).isoformat(), "last_sync": store.get_meta("last_sync")}
+    out = Path(args.out) if args.out else SNAPSHOT_PATH
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(encode_dataset(Dataset(tx, store.load_closed_pnl(), store.load_klines(), meta)))
+    print(f"Wrote {out} ({out.stat().st_size / 1e6:.1f} MB, {len(tx):,} transactions).")
+    print("Anyone can download this file once you push it: it contains every fill, fee, transfer and balance.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -113,6 +146,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--currency", help="Settlement currency to analyse (default: the one you trade most, e.g. USDT)")
     p.add_argument("--export", metavar="DIR", help="Also write round trips / symbol / daily tables as CSV")
     p.set_defaults(func=cmd_report)
+
+    p = sub.add_parser("serve", help="Run the web dashboard locally")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--no-browser", action="store_true")
+    p.set_defaults(func=cmd_serve)
+
+    p = sub.add_parser("publish", help="Write snapshots/owner.json.gz for the hosted dashboard")
+    p.add_argument("--label", default="Published account", help="Name shown in the data-source list")
+    p.add_argument("--out", help="Output path (default: snapshots/owner.json.gz)")
+    p.set_defaults(func=cmd_publish)
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s %(message)s")

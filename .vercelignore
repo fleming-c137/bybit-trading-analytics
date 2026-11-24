@@ -1,0 +1,11 @@
+.env
+*.env
+.venv
+data
+reports
+tests
+docs
+.pytest_cache
+**/__pycache__
+*.egg-info
+.claude

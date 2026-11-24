@@ -48,12 +48,12 @@ def trade_stats(pnl: pd.Series) -> dict:
 
 
 def _group_stats(df: pd.DataFrame, by, extra: dict | None = None) -> pd.DataFrame:
-    g = df.groupby(by, observed=True)
+    g = df.assign(_win=(df["net_pnl"] > 0).astype(float)).groupby(by, observed=True)
     out = g.agg(
         trades=("net_pnl", "size"),
         net_pnl=("net_pnl", "sum"),
         avg_pnl=("net_pnl", "mean"),
-        win_rate=("net_pnl", lambda s: (s > 0).mean()),
+        win_rate=("_win", "mean"),
         gross_pnl=("gross_pnl", "sum"),
         fees=("fees", "sum"),
         funding=("funding", "sum"),
@@ -208,7 +208,7 @@ def by_hour_weekday(rounds: pd.DataFrame) -> pd.DataFrame:
     c = closed(rounds).copy()
     t = c["open_time"].dt.tz_convert("UTC")
     c["hour"] = t.dt.hour
-    c["weekday"] = pd.Categorical(t.dt.dayofweek.map(dict(enumerate(WEEKDAYS))), WEEKDAYS, ordered=True)
+    c["weekday"] = pd.Categorical(t.dt.day_of_week.map(dict(enumerate(WEEKDAYS))), WEEKDAYS, ordered=True)
     return _group_stats(c[~c["partial"]], ["weekday", "hour"])
 
 

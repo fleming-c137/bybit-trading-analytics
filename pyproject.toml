@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bybit-trading-analytics"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pull your Bybit Unified Trading Account history via the V5 API and analyse your trading performance."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,8 +12,6 @@ dependencies = [
     "pandas>=2.0",
     "numpy>=1.24",
     "requests>=2.31",
-    "plotly>=5.18",
-    "streamlit>=1.32",
     "python-dotenv>=1.0",
 ]
 

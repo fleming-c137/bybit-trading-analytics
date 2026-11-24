@@ -179,3 +179,55 @@ def test_trading_scope_excludes_other_coins_and_spot():
     assert scoped.loc[scoped["id"] == "3", "type"].item() == "SPOT_TRADE"
     s = A.account_summary(scoped, build_round_trips(scoped))
     assert s["net_pnl"] == 0 and s["deposits"] == pytest.approx(113.0)
+
+
+# ------------------------------------------------------------ web report
+from bybit_analytics import webapi  # noqa: E402
+from bybit_analytics.report import Dataset, build_report, decode_dataset, encode_dataset, prepare  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def demo_ds():
+    tx, cp, kl = generate(days=40, seed=3)
+    return Dataset(tx, cp, kl, {"kind": "demo"})
+
+
+def test_dataset_roundtrip_preserves_analysis(demo_ds):
+    back = decode_dataset(encode_dataset(demo_ds))
+    assert len(back.tx) == len(demo_ds.tx)
+    assert back.tx["time"].dt.tz is not None
+    assert (back.tx["category"] == demo_ds.tx["category"]).all()  # empty strings stay strings
+    a = build_report(prepare(demo_ds))["summary"]
+    b = build_report(prepare(back))["summary"]
+    for k in ["net_pnl", "trades", "win_rate", "max_drawdown_usdt"]:
+        assert a[k] == pytest.approx(b[k])
+
+
+def test_report_filters_and_empty_selection(demo_ds):
+    p = prepare(demo_ds)
+    full = build_report(p)
+    assert not full["empty"] and full["verdict"]["tone"] in {"positive", "negative"}
+    assert full["summary"]["trades"] == len(full["trades"]["rows"])
+    one = full["meta"]["symbols"][0]
+    sub = build_report(p, symbols=[one])
+    assert set(r[0] for r in sub["trades"]["rows"]) == {one}
+    assert build_report(p, start="2001-01-01", end="2001-01-02")["empty"] is True
+    with pytest.raises(Exception):
+        build_report(p, start="not a date")
+
+
+def test_handle_csv_then_dataset(monkeypatch):
+    monkeypatch.setattr(webapi, "_klines_for", lambda tx, client=None: pd.DataFrame())
+    csv = "\n".join([CSV_HEADER, *CSV_ROWS])
+    status, body, _ = webapi.handle({"source": "csv", "csv": csv})
+    assert status == 200 and body["report"]["summary"]["trades"] == 1
+    status, body2, _ = webapi.handle({"source": "dataset", "dataset": body["dataset"]})
+    assert status == 200 and body2["report"]["summary"]["net_pnl"] == pytest.approx(body["report"]["summary"]["net_pnl"])
+    assert "dataset" not in body2
+
+
+def test_handle_rejects_bad_input():
+    assert webapi.handle({"source": "api", "credentials": {}})[0] == 400
+    assert webapi.handle({"source": "local"}, allow_local=False)[0] == 404
+    assert webapi.handle({"source": "nope"})[0] == 400
+    assert webapi.handle({"source": "dataset", "dataset": "garbage"})[0] == 400

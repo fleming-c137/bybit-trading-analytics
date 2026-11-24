@@ -5,17 +5,37 @@ the full history of a Bybit **Unified Trading Account** through the **V5 REST AP
 rebuilds individual trades from raw fills, and answers one question: **does
 this trading have an edge, and if not, where exactly does the money go?**
 
+![Dashboard overview (demo data)](docs/dashboard-overview.png)
+
 > Started as a one-off Colab notebook that explored a downloaded CSV ("how many
 > rows, what types of records, what are the biggest changes"). This version
 > replaces the manual export with an API pipeline, swaps descriptive questions for
-> decision-oriented ones, and ships an interactive dashboard.
-
-<!-- Screenshot: run the dashboard on demo data and save as docs/dashboard-overview.png
-![Dashboard overview](docs/dashboard-overview.png)
--->
-> Try it without an API key: `python -m bybit_analytics demo`, then `streamlit run dashboard/app.py` and pick **Demo data**.
+> decision-oriented ones, and ships an interactive dashboard that anyone can run
+> on their own account.
 
 ---
+
+## What my account shows
+
+Two years of real history: 54,581 transaction-log rows, rebuilt into **7,236
+round-trip trades on 406 USDT perpetuals**.
+
+| | |
+|---|---|
+| **Net result** | **−3,554 USDT** on 6,515 deposited (−54.6% of deposits) |
+| **Edge** | 20.6% win rate against a **32% break-even** at a 2.12 payoff ratio. Expectancy −0.49 USDT per trade, profit factor 0.55 |
+| **Where it went** | −1,788 from trading itself, **−1,843 in fees** (51% of the damage), +76 funding received |
+| **Holding time** | Trades held **under 15 minutes lost −4,761** with a 6–21% win rate. Trades held **1–24 hours made +1,513** with a 45–67% win rate |
+| **Overtrading** | Correlation between trades per day and that day's PnL: **−0.47**. Busier days are worse days |
+| **Direction** | Longs −3,131 vs shorts −423 |
+| **Concentration** | Losses are spread out: 327 of 406 symbols lost money; the worst five account for only 19% |
+| **Risk** | 329 liquidations cost −407 (5% of losing-trade PnL); max drawdown −3,647 |
+| **Market** | Correlation with BTC's daily return: +0.06. The results aren't the market; they're the trading |
+
+**The takeaway:** the losses are not bad luck or one bad coin. They come
+from a fast scalping style whose fee bill alone is as large as its trading loss.
+The same account is profitable when positions are held for hours. The data's
+recommendation is to trade less often and hold longer.
 
 ## The questions
 
@@ -25,37 +45,62 @@ this trading have an edge, and if not, where exactly does the money go?**
 | 2 | **Where does the PnL go?** | Shows whether losses come from bad trades or from costs | Waterfall: gross → fees → funding → net; effective fee rate on volume |
 | 3 | **Is there an edge?** | Win rate means nothing without payoff | Win rate, payoff ratio, profit factor, expectancy, **break-even win rate** |
 | 4 | **How bad does it get?** | Risk of ruin | Max drawdown (USDT), days under water, worst day, liquidations and what they cost |
-| 5 | **Which symbols create or destroy value?** | Shows where to stop trading | PnL by symbol, Pareto of losses, trade count vs. PnL |
+| 5 | **Which symbols create or destroy value?** | Shows where to stop trading | PnL by symbol, share of losses, trade count vs. PnL |
 | 6 | **Longs or shorts?** | Directional bias | Side-by-side edge metrics |
 | 7 | **When do I trade best/worst?** | Session effects | Hour × weekday heatmap of PnL (UTC) |
-| 8 | **Do I cut winners and let losers run?** | Classic discretionary flaw | Holding-time buckets; median hold of winners vs. losers |
-| 9 | **Do I revenge-trade?** | Tilt is measurable | Performance of trades opened ≤ N min after a loss vs. after a pause |
+| 8 | **Do I cut winners and let losers run?** | Classic discretionary flaw | Holding-time buckets against the break-even win rate; median hold of winners vs. losers |
+| 9 | **Do I revenge-trade?** | Tilt is measurable | Trades opened ≤ N min after a loss vs. after a pause (5/15/30/60 min) |
 | 10 | **Do I overtrade?** | More trades ≠ more money | Trades per day vs. daily PnL (correlation + buckets) |
 | 11 | **Does size or leverage hurt me?** | Sizing discipline | Notional quintiles; leverage buckets (from closed-PnL API) |
 | 12 | **Is my PnL just the market?** | The "external factors" question the original notebook couldn't answer | Daily PnL vs. BTC daily return and volatility (public kline API) |
 
-The dashboard writes the findings out as plain English, computed from the data
-(e.g. *"Trades opened ≤15m after a loss average −0.90 USDT (18% win) vs −0.40
-(25% win) after a pause"*).
+## The dashboard
+
+The information is ordered by how much it matters:
+
+1. **Verdict.** One sentence on whether there's an edge, with the gross, fees, funding and net numbers behind it.
+2. **KPIs.** Net PnL, return on deposits, win rate against break-even, profit factor, expectancy, max drawdown.
+3. **Main charts.** Cumulative PnL and where the money went.
+4. **Key findings.** Plain-English findings computed from the data (not hand-written).
+5. **Detail on demand.** Secondary charts and tables are folded into accordions.
+
+Seven pages cover the twelve questions: Overview, Trade quality, Symbols, Timing & behaviour, Risk,
+Market context and Trades. The period, symbol and currency filters recompute every number on the server.
+
+| Trade quality | Timing & behaviour |
+|---|---|
+| ![Trade quality](docs/dashboard-edge.png) | ![Timing and behaviour](docs/dashboard-timing.png) |
+
+Screenshots use the synthetic demo account.
+
+**Data sources in the sidebar**
+
+| Source | What it is |
+|---|---|
+| Published account | A snapshot of my account (`snapshots/owner.json.gz`), made locally with `publish` |
+| This machine | Your synced SQLite database. Only appears when you run the dashboard locally |
+| Demo account | Synthetic data, so the project works with no key at all |
+| Your API key | A visitor's own read-only key, last 7–90 days, fetched live |
+| Upload CSV export | Bybit's "Asset Change Details" export (up to 4 MB on the hosted site) |
 
 ## Architecture
 
 ```
-Bybit V5 API ──► client.py ──► transform.py ──► storage.py (SQLite) ──► trades.py ──► analysis.py ──► dashboard/app.py
-  (signed GET,     (7-day        (one canonical    (idempotent          (fills →        (metrics +       (Streamlit +
-   pagination,      windows,      schema for API    upserts,             round-trip      questions)       Plotly)
-   retries)         cursor)       and CSV)          incremental sync)    trades)
+Bybit V5 API ──► client.py ──► transform.py ──► storage.py (SQLite) ──► trades.py ──► analysis.py ──► report.py ──► /api/report ──► public/ (HTML + ECharts)
 ```
 
 | Module | Responsibility |
 |--------|----------------|
 | `client.py` | Read-only V5 client: HMAC-SHA256 signing, clock-drift resync, rate-limit backoff, cursor pagination, automatic 7-day windowing (Bybit's max query span) over the 2-year history limit |
-| `transform.py` | Normalizes the API's JSON **and** Bybit's CSV export into one schema. Fee and funding signs differ between the two, so they are derived from the identity `change = cash_flow + fee + funding` |
+| `transform.py` | Normalises the API's JSON **and** Bybit's CSV export into one schema. Fee and funding signs differ between the two, so they are derived from the identity `change = cash_flow + fee + funding` |
 | `storage.py` | SQLite store with upserts, so re-running `sync` is safe and incremental |
 | `trades.py` | Rebuilds **round-trip trades** (flat → position → flat) from fill-level data using the signed post-trade position size. Handles multi-fill orders, position flips, positions already open when the data starts, and assigns funding payments to the position open at the time |
-| `analysis.py` | All metrics and the 12 questions as pure functions returning DataFrames. The dashboard, CLI and tests all call these |
-| `charts.py` | Plotly figures using a colorblind-validated palette (blue = gain, red = loss) |
-| `demo.py` | Synthetic account generator, so the project runs with no API key |
+| `analysis.py` | All metrics and the 12 questions as pure functions returning DataFrames |
+| `report.py` | Turns a dataset plus filters into the JSON the dashboard renders; serialises datasets |
+| `webapi.py` | The one API endpoint: data sources, visitor keys, CSV uploads, caching |
+| `server.py` / `api/report.py` | The same endpoint served locally (`serve`) or as a Vercel Python function |
+| `public/` | The dashboard: plain HTML, CSS and JavaScript with ECharts. It only lays out numbers; it computes none |
+| `demo.py` | Synthetic account generator |
 
 ### Endpoints used
 
@@ -73,25 +118,60 @@ git clone https://github.com/fleming-c137/bybit-trading-analytics.git
 cd bybit-trading-analytics
 python -m venv .venv && .venv\Scripts\activate      # macOS/Linux: source .venv/bin/activate
 pip install -e ".[dev]"
+python -m bybit_analytics serve                     # opens http://localhost:8000 with the demo account
 ```
 
-**Option A: your account via the API**
+**Your own account through the API**
 
 1. Create a **read-only** API key at Bybit → Account → API Management (no Trade/Withdraw/Transfer permissions; IP-restrict it if you can).
 2. `cp .env.example .env` and fill in `BYBIT_API_KEY` / `BYBIT_API_SECRET`.
-3. Sync and explore:
+3. Sync, then explore:
 
 ```bash
 python -m bybit_analytics sync            # first run pulls up to 2 years; later runs are incremental
 python -m bybit_analytics report          # key findings in the terminal
-streamlit run dashboard/app.py
+python -m bybit_analytics serve           # "This machine" appears as a data source
 ```
 
-**Option B: a CSV export.** `python -m bybit_analytics import-csv path/to/AssetChangeDetails_uta_*.csv`, or upload it in the dashboard sidebar.
-
-**Option C: demo data.** `python -m bybit_analytics demo`, then pick *Demo data* in the dashboard.
+**A CSV export instead:** `python -m bybit_analytics import-csv path/to/AssetChangeDetails_uta_*.csv`, or upload it in the dashboard.
 
 Run the tests with `pytest`.
+
+## Hosting
+
+The repo deploys to **Vercel** as is: `public/` is served as a static site and
+`api/report.py` runs as a Python serverless function (`vercel.json`).
+
+1. Import the GitHub repo at vercel.com/new. Leave the framework preset on "Other" and the build settings empty.
+2. Deploy. There are no environment variables to set.
+
+**How my key stays private while my results are public.** The hosted site never
+holds my API key. I sync on my own machine and run:
+
+```bash
+python -m bybit_analytics publish         # writes snapshots/owner.json.gz from the local database
+git add snapshots/owner.json.gz && git commit -m "Update snapshot" && git push
+```
+
+Vercel redeploys and the "Published account" source updates. The snapshot holds
+the trading history (fills, fees, transfers, balances), not credentials. Anyone can
+download it, so publish only an account you're happy to show.
+
+**How visitors use their own key.** "Your API key" sends a visitor's read-only key
+over HTTPS to the serverless function. The function fetches up to 90 days, builds
+the report and returns it with the data, so filters don't need the key again. The
+key is not stored, logged or sent back, and the browser drops it as soon as the
+request ends. Keys restricted to an IP allow list won't work, because serverless
+IPs change.
+
+**Region.** Bybit blocks requests from US IP addresses, so the function is pinned
+to Mumbai (`"regions": ["bom1"]` in `vercel.json`). Change it if your audience
+needs another region; avoid US ones.
+
+**Other hosts.** Anything that can run `python -m bybit_analytics serve --host 0.0.0.0 --port $PORT`
+works, with no code changes: Render, Railway, Fly.io, Google Cloud Run, or a
+Hugging Face Space (Docker). Pick a non-US region for the same reason. A long-running
+server also lifts the 60-second and 4.5 MB limits that serverless imposes.
 
 ## Methodology notes
 
@@ -100,17 +180,19 @@ Run the tests with `pytest`.
 - **Max drawdown** is measured in USDT on cumulative PnL. A percentage drawdown misleads on an account that is topped up repeatedly.
 - **Time-weighted return** is chained event by event, so deposits don't distort it.
 - **Partial trades** (already open when the data starts) count toward PnL but not toward holding-time or size statistics.
-- Times are UTC. The analysis assumes a USDT-margined account.
+- **Currencies** are analysed one at a time (USDT by default). Spot trades, conversions and earn products count as balance movements, not trading PnL.
+- Times are UTC.
 
 ## Security & privacy
 
 - The client only implements GET requests. It cannot trade or move funds.
-- `.env`, `data/` and `reports/` are git-ignored. Your keys and trading history never leave your machine.
-- Public screenshots come from synthetic demo data.
+- `.env`, `data/` and `reports/` are git-ignored. Keys and the local database never leave your machine.
+- The hosted function never logs request bodies, and visitor keys live only for the length of one request.
+- Charts use a colourblind-safe gain/loss pair (blue `#3987e5` / red `#e66767`, validated against the dark surface), and every chart has a text alternative or a table.
 
 ## Roadmap
 
-- [ ] Scheduled sync (cron / GitHub Action to a private store)
-- [ ] Spot and options categories
 - [ ] Benchmark against buy-and-hold BTC over the same capital path
 - [ ] Monte Carlo of the trade distribution → probability of ruin
+- [ ] Spot and options categories
+- [ ] Scheduled snapshot refresh from a non-US runner
