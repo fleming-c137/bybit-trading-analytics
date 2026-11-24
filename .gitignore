@@ -1,0 +1,31 @@
+# Secrets -- never commit API keys
+.env
+*.env
+!.env.example
+
+# Your personal trading data stays local
+data/*
+!data/.gitkeep
+reports/*
+!reports/.gitkeep
+*.csv
+!tests/fixtures/*.csv
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude/
