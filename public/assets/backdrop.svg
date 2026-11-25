@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16181d"/>
+      <stop offset="0.45" stop-color="#2c2f36"/>
+      <stop offset="0.62" stop-color="#4a4544"/>
+      <stop offset="0.72" stop-color="#6b5446"/>
+    </linearGradient>
+    <linearGradient id="far" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5d5f66"/>
+      <stop offset="1" stop-color="#3b3d43"/>
+    </linearGradient>
+    <linearGradient id="mid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7a5446"/>
+      <stop offset="0.35" stop-color="#4a3a37"/>
+      <stop offset="1" stop-color="#2a2b30"/>
+    </linearGradient>
+    <linearGradient id="near" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3536"/>
+      <stop offset="1" stop-color="#1c1d21"/>
+    </linearGradient>
+    <linearGradient id="mist" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d9d4cf" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#d9d4cf" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#d9d4cf" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.62" cy="0.62" r="0.45">
+      <stop offset="0" stop-color="#e8641c" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#e8641c" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cloud" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#9aa0aa" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#9aa0aa" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#9aa0aa" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#sky)"/>
+  <rect width="1600" height="1000" fill="url(#glow)"/>
+  <ellipse cx="420" cy="150" rx="520" ry="46" fill="url(#cloud)"/>
+  <ellipse cx="1180" cy="230" rx="640" ry="38" fill="url(#cloud)"/>
+  <ellipse cx="800" cy="90" rx="420" ry="26" fill="url(#cloud)"/>
+  <!-- far range -->
+  <path fill="url(#far)" d="M0 520 L90 470 L170 495 L260 430 L330 455 L420 380 L500 430 L560 405 L640 455 L720 410 L800 350 L870 395 L950 372 L1030 430 L1110 390 L1190 420 L1280 360 L1350 400 L1440 380 L1530 430 L1600 410 L1600 1000 L0 1000 Z"/>
+  <path fill="#cfd2d8" opacity="0.35" d="M420 380 L452 400 L438 402 L470 416 L500 430 L460 418 L430 408 L405 395 Z M800 350 L830 372 L815 371 L850 388 L800 370 L785 362 Z M1280 360 L1305 378 L1292 377 L1330 392 L1278 375 L1262 370 Z"/>
+  <rect y="430" width="1600" height="160" fill="url(#mist)"/>
+  <!-- middle range, lit -->
+  <path fill="url(#mid)" d="M0 640 L70 600 L150 615 L230 545 L300 575 L380 520 L450 560 L520 535 L600 600 L680 560 L760 500 L840 545 L900 520 L990 585 L1070 540 L1150 470 L1230 525 L1300 505 L1380 560 L1460 530 L1540 575 L1600 555 L1600 1000 L0 1000 Z"/>
+  <path fill="#a06a52" opacity="0.35" d="M380 520 L420 545 L400 548 L450 560 L395 552 L360 540 Z M760 500 L800 525 L782 527 L840 545 L770 530 L740 518 Z M1150 470 L1190 498 L1170 499 L1230 525 L1160 505 L1128 490 Z"/>
+  <rect y="590" width="1600" height="140" fill="url(#mist)"/>
+  <!-- near ridge -->
+  <path fill="url(#near)" d="M0 760 L120 720 L230 745 L340 690 L460 735 L560 705 L680 760 L800 720 L920 690 L1040 735 L1150 705 L1260 750 L1380 715 L1500 745 L1600 725 L1600 1000 L0 1000 Z"/>
+  <!-- foreground -->
+  <path fill="#121316" d="M0 880 L160 850 L320 870 L480 835 L640 865 L820 840 L980 870 L1150 845 L1320 872 L1480 850 L1600 862 L1600 1000 L0 1000 Z"/>
+</svg>
