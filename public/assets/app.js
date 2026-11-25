@@ -353,6 +353,12 @@ function rankList(rows, ccy, { key = "symbol", n = 5 } = {}) {
     <span class="rank-val">${money0(d.net_pnl)}</span><span class="rank-sub">${fmt.int(d.trades)} trades, ${fmt.pct(d.win_rate)} win</span></li>`).join("")}</ol>`;
 }
 
+// Fees are a cost of doing business, so they sit under the PnL chart rather than among the KPIs.
+function costStrip(s) {
+  const step = (label, v, cls = "") => `<div class="cost ${cls}"><span>${label}</span><b>${money0(v)}</b></div>`;
+  return `<div class="costs" aria-label="PnL before and after costs, ${esc(s.currency)}">
+    ${step("Before fees", s.gross_pnl)}${step("Trading fees", s.fees, "muted")}${step("Funding", s.funding, "muted")}${step("Net result", s.net_pnl, "total")}</div>`;
+}
 function pageOverview(r) {
   const s = r.summary, ccy = s.currency, be = s.breakeven_win_rate, h = r.highlights || { working: [], costing: [] };
   const kpis = `<div class="kpis">
@@ -361,7 +367,8 @@ function pageOverview(r) {
     ${kpi("Average win / loss", `${fmt.money(s.avg_win)} <span class="kpi-sep">/</span> ${fmt.money(s.avg_loss)}`, { unit: ccy,
         foot: isNum(s.payoff_ratio) ? `Wins are ${fmt.num(s.payoff_ratio, 1)}x the size of losses` : "" })}
     ${kpi("Trades", fmt.int(s.trades), { foot: `${fmt.num(s.trades_per_active_day, 1)} per trading day &middot; ${fmt.int(s.symbols_traded)} coins` })}
-    ${kpi("Fees paid", fmt.num(-s.fees, 0), { unit: ccy, foot: s.net_pnl < 0 && s.fees < 0 ? `${fmt.pct(Math.min(1, -s.fees / Math.abs(s.net_pnl)))} of your net loss` : "" })}
+    ${kpi("Average per trade", fmt.money(s.expectancy, Math.abs(s.expectancy) >= 10 ? 1 : 2), { unit: ccy,
+        foot: `After fees${isNum(s.profit_factor) ? ` &middot; profit factor ${fmt.num(s.profit_factor, 2)}` : ""}` })}
     ${kpi("Biggest drop", fmt.money(s.max_drawdown_usdt, 0), { unit: ccy, foot: "From your best point to your worst" })}
   </div>`;
   const list = (items, kind) => items.length ? `<ul class="hl ${kind}">${items.map((t) => `<li>${icon(kind === "good" ? "check" : "alert")}<span>${esc(t)}</span></li>`).join("")}</ul>` : `<p class="note">Nothing stands out yet.</p>`;
@@ -375,7 +382,7 @@ function pageOverview(r) {
   queueChart("c-cum", cumPnlChart(r.daily, ccy));
   queueChart("c-daily", dailyPnlChart(r.daily, ccy));
   return verdictBlock(r) + kpis +
-    card("Your PnL over time", `Running total after fees, deposits excluded (${esc(ccy)})`, chartBox("c-cum", "tall", "Cumulative PnL line chart"), "s8") + hl +
+    card("Your PnL over time", `Running total after fees, deposits excluded (${esc(ccy)})`, chartBox("c-cum", "tall", "Cumulative PnL line chart") + costStrip(s), "s8") + hl +
     card("Best and worst", "Where you made and lost the most, by net PnL", bwTable) +
     accordion("Daily results", "Each day's PnL; drag the slider to zoom", chartBox("c-daily", "", "Daily PnL bar chart"));
 }

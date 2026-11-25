@@ -364,6 +364,14 @@ dialog[open] { animation: rise 220ms var(--ease); }
 .session-v { font-size: 22px; font-weight: 500; letter-spacing: -0.035em; margin-top: 4px; }
 .session-v small { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); font-weight: 400; letter-spacing: 0; margin-left: 2px; }
 
+.costs { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.costs > i { font-style: normal; color: var(--text-3); font-family: var(--mono); font-size: 12px; }
+.cost { display: flex; flex-direction: column; gap: 1px; }
+.cost span { font-size: 11.5px; color: var(--text-3); }
+.cost b { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text-1); }
+.cost.muted b { color: var(--text-2); }
+.cost.total { margin-left: auto; text-align: right; }
+
 /* ---------------------------------------------------------- responsive */
 @media (max-width: 1280px) {
   .s8, .s7 { grid-column: span 12; } .s5, .s4 { grid-column: span 12; }

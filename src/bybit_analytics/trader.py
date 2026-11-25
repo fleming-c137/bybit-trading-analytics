@@ -201,9 +201,13 @@ def highlights(s: dict, tables: dict, tilt: pd.DataFrame, busy: pd.DataFrame, cc
         if top["net_pnl"] > 0:
             good.append(f"{top['direction']}s are profitable: {_money(top['net_pnl'], ccy)}.")
 
-    if s["fees"] < 0 and s["net_pnl"] < 0:
-        share = abs(s["fees"]) / (abs(s["net_pnl"]) + 1e-9)
-        bad.append(f"Fees cost {abs(s['fees']):,.0f} {ccy}, {min(share, 9.99):.0%} of your net loss.")
+    # Fees are a cost of trading, not a skill signal; mention them only when they change the outcome.
+    gross, fees = s.get("gross_pnl") or 0.0, abs(s.get("fees") or 0.0)
+    if gross > 0 and s["net_pnl"] < 0:
+        bad.append(f"Your trades made {_money(gross, ccy)} before fees, but fees and funding turned it into "
+                   f"{_money(s['net_pnl'], ccy)}. Fewer, larger trades would keep more of it.")
+    elif gross > 0 and fees > gross / 3:
+        bad.append(f"Fees took {fees / gross:.0%} of your profit before fees ({fees:,.0f} {ccy}).")
     if tilt is not None and not tilt.empty:
         t = tilt.set_index("context")
         after = [i for i in t.index if "after a loss" in i]

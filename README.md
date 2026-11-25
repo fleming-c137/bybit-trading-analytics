@@ -61,7 +61,7 @@ leads with the answer and keeps detail folded away.
 
 | Page | Answers |
 |---|---|
-| **Overview** | Am I making money? A one-line verdict, the last day / 7 days / 30 days, win rate (wins and losses), average win vs loss, fees, biggest drop, PnL over time, *what's working* and *what's costing you*, and a best-vs-worst table by hour, day, session, asset class, coin, direction and holding time |
+| **Overview** | Am I making money? A one-line verdict, the last day / 7 days / 30 days, win rate (wins and losses), average win vs loss, average result per trade, biggest drop, PnL over time with a before-fees / fees / funding / net breakdown, *what's working* and *what's costing you*, and a best-vs-worst table by hour, day, session, asset class, coin, direction and holding time |
 | **When to trade** | Best and worst hour and day, results by hour (UTC or your own time zone), by weekday and by session (Asia, London, New York), and **which weekdays the market tends to pump or dump** (BTC average daily move and share of green days) |
 | **What to trade** | Profit by asset class (Bitcoin, Ethereum, large caps, layer 1 & 2, DeFi, AI, memecoins, gaming, small caps & new listings), what you trade most, top and bottom coins, longs vs shorts |
 | **Habits** | How long you hold vs results, win rate right after a loss, busy days, leverage |
