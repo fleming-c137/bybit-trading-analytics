@@ -99,18 +99,18 @@ const state = {
 
 /* ------------------------------------------------------------ charts */
 const T = {
-  text1: "#f2efe9", text2: "rgba(242,239,233,0.76)", text3: "rgba(242,239,233,0.56)",
-  grid: "rgba(255,255,255,0.07)", axis: "rgba(255,255,255,0.16)",
-  gain: "#3987e5", loss: "#e66767", mid: "#383835", accent: "#9085e9", font: "Inter, system-ui, sans-serif",
+  text1: "#1f1d1a", text2: "rgba(31,29,26,0.74)", text3: "rgba(31,29,26,0.6)",
+  grid: "rgba(31,29,26,0.07)", axis: "rgba(31,29,26,0.2)",
+  gain: "#0f8a6e", loss: "#d03b3b", mid: "#e4e1dc", accent: "#e8641c", font: "Inter, system-ui, sans-serif",
 };
 const charts = new Map();
 const pending = new Map();
 
 function tooltipBase(extra = {}) {
   return {
-    backgroundColor: "rgba(14,20,34,0.94)", borderColor: "rgba(255,255,255,0.14)", borderWidth: 1,
+    backgroundColor: "rgba(252,251,249,0.97)", borderColor: "rgba(31,29,26,0.12)", borderWidth: 1,
     padding: [8, 12], textStyle: { color: T.text1, fontSize: 12, fontFamily: T.font },
-    extraCssText: "border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.4);", confine: true, ...extra,
+    extraCssText: "border-radius:10px;box-shadow:0 10px 28px rgba(60,50,40,.14);", confine: true, ...extra,
   };
 }
 function baseOption(opt) {
@@ -141,7 +141,7 @@ const signBar = (v, horizontal = false) => ({
   value: v,
   itemStyle: { color: signColor(v), borderRadius: horizontal ? (v >= 0 ? [0, 4, 4, 0] : [4, 0, 0, 4]) : (v >= 0 ? [4, 4, 0, 0] : [0, 0, 4, 4]) },
 });
-const zeroLine = { silent: true, symbol: "none", label: { show: false }, lineStyle: { color: "rgba(255,255,255,0.28)", type: "solid", width: 1 }, data: [{ yAxis: 0 }] };
+const zeroLine = { silent: true, symbol: "none", label: { show: false }, lineStyle: { color: "rgba(31,29,26,0.3)", type: "solid", width: 1 }, data: [{ yAxis: 0 }] };
 const ttRow = (label, value) => `<div style="display:flex;justify-content:space-between;gap:18px"><span style="color:${T.text3}">${esc(label)}</span><b style="font-weight:600">${value}</b></div>`;
 const ttHead = (t) => `<div style="margin-bottom:4px;font-weight:600">${esc(t)}</div>`;
 
@@ -181,8 +181,8 @@ function cumPnlChart(daily, ccy) {
       return ttHead(fmt.date(d.date)) + ttRow("Cumulative PnL", `${fmt.money(d.cum_pnl)} ${ccy}`) + ttRow("That day", fmt.money(d.pnl)) + ttRow("Fills", fmt.int(d.fills));
     } },
     series: [{
-      type: "line", data, showSymbol: false, lineStyle: { width: 2, color: T.gain }, itemStyle: { color: T.gain },
-      areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(57,135,229,0.30)" }, { offset: 1, color: "rgba(57,135,229,0.02)" }]) },
+      type: "line", data, showSymbol: false, lineStyle: { width: 2, color: T.accent }, itemStyle: { color: T.accent },
+      areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(232,100,28,0.24)" }, { offset: 1, color: "rgba(232,100,28,0.02)" }]) },
       markLine: zeroLine,
     }],
   };
@@ -190,9 +190,9 @@ function cumPnlChart(daily, ccy) {
 function dailyPnlChart(daily, ccy) {
   return {
     xAxis: timeAxis(), yAxis: valueAxis(),
-    dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 4, borderColor: "transparent", backgroundColor: "rgba(255,255,255,0.04)",
-      fillerColor: "rgba(122,160,255,0.18)", handleStyle: { color: "#c9d6ff", borderColor: "transparent" }, moveHandleStyle: { color: "rgba(255,255,255,.2)" },
-      textStyle: { color: T.text3 }, dataBackground: { lineStyle: { color: "rgba(255,255,255,.2)" }, areaStyle: { color: "rgba(255,255,255,.06)" } } }],
+    dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 4, borderColor: "transparent", backgroundColor: "rgba(31,29,26,0.04)",
+      fillerColor: "rgba(232,100,28,0.16)", handleStyle: { color: "#e8641c", borderColor: "transparent" }, moveHandleStyle: { color: "rgba(31,29,26,.2)" },
+      textStyle: { color: T.text3 }, dataBackground: { lineStyle: { color: "rgba(31,29,26,.25)" }, areaStyle: { color: "rgba(31,29,26,.06)" } } }],
     grid: { left: 6, right: 14, top: 14, bottom: 34, containLabel: true },
     tooltip: { trigger: "axis", formatter: (p) => {
       const d = daily[p[0].dataIndex];
@@ -264,7 +264,7 @@ function heatmapChart(rows, ccy) {
       if (!r) return ttHead(`${days[p.value[1]]} ${hours[p.value[0]]}:00`) + "No trades";
       return ttHead(`${days[p.value[1]]} ${hours[p.value[0]]}:00 UTC`) + ttRow("Net PnL", `${fmt.money(r.net_pnl)} ${ccy}`) + ttRow("Trades", fmt.int(r.trades)) + ttRow("Win rate", fmt.pct(r.win_rate));
     } },
-    series: [{ type: "heatmap", data, itemStyle: { borderColor: "rgba(8,12,22,0.9)", borderWidth: 2, borderRadius: 3 }, emphasis: { itemStyle: { borderColor: T.text1, borderWidth: 1 } } }],
+    series: [{ type: "heatmap", data, itemStyle: { borderColor: "#f4f2ee", borderWidth: 2, borderRadius: 3 }, emphasis: { itemStyle: { borderColor: T.text1, borderWidth: 1 } } }],
   };
 }
 function kpi(label, value, { unit = "", foot = "", tone = null, meter = null, text = false } = {}) {

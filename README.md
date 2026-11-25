@@ -192,7 +192,7 @@ server also lifts the 60-second and 4.5 MB limits that serverless imposes.
 - The client only implements GET requests. It cannot trade or move funds.
 - `.env`, `data/` and `reports/` are git-ignored. Keys and the local database never leave your machine.
 - The hosted function never logs request bodies, and visitor keys live only for the length of one request.
-- Charts use a colourblind-safe gain/loss pair (blue `#3987e5` / red `#e66767`, validated against the dark surface), and every chart has a text alternative or a table.
+- Charts use a colourblind-safe gain/loss pair (green `#0f8a6e` / red `#d03b3b`, validated against the light surface) with orange as the only accent, and every chart has a text alternative.
 
 ## Roadmap
 
