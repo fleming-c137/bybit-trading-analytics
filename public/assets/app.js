@@ -23,6 +23,8 @@ const ICONS = {
   csv: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/>',
   local: '<path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><path d="M6 16h.01"/><path d="M10 16h.01"/>',
   chev: '<path d="m6 9 6 6 6-6"/>',
+  tick: '<path d="M20 6 9 17l-5-5"/>',
+  swap: '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
   alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   check: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
@@ -100,16 +102,25 @@ const state = {
 /* ------------------------------------------------------------ charts */
 const T = {
   text1: "#f4f2ee", text2: "rgba(244,242,238,0.8)", text3: "rgba(244,242,238,0.62)",
-  grid: "rgba(255,255,255,0.09)", axis: "rgba(255,255,255,0.22)",
-  gain: "#199e70", loss: "#e66767", mid: "#383835", accent: "#f07a35", font: "Inter, system-ui, sans-serif",
+  grid: "rgba(255,255,255,0.06)", axis: "rgba(255,255,255,0.14)",
+  gain: "#199e70", loss: "#e66767", mid: "#383835", accent: "#f07a35",
+  font: "Geist, system-ui, sans-serif", mono: "'Geist Mono', ui-monospace, monospace",
 };
+const rgba = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+// Bars fade from a solid tip toward the baseline, so the eye reads the end value first.
+function barFill(c, v, horizontal) {
+  const stops = [{ offset: 0, color: c }, { offset: 1, color: rgba(c, 0.38) }];
+  return horizontal ? new echarts.graphic.LinearGradient(v >= 0 ? 1 : 0, 0, v >= 0 ? 0 : 1, 0, stops)
+    : new echarts.graphic.LinearGradient(0, v >= 0 ? 0 : 1, 0, v >= 0 ? 1 : 0, stops);
+}
+const barHover = { emphasis: { focus: "self" }, blur: { itemStyle: { opacity: 0.35 } } };
 const charts = new Map();
 const pending = new Map();
 
 function tooltipBase(extra = {}) {
   return {
-    backgroundColor: "rgba(28,29,34,0.88)", borderColor: "rgba(255,255,255,0.22)", borderWidth: 1,
-    padding: [8, 12], textStyle: { color: T.text1, fontSize: 12, fontFamily: T.font },
+    backgroundColor: "rgba(22,23,27,0.86)", borderColor: "rgba(255,255,255,0.10)", borderWidth: 1,
+    padding: [10, 12], textStyle: { color: T.text1, fontSize: 12, fontFamily: T.font },
     extraCssText: "border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.4);backdrop-filter:blur(12px);", confine: true, ...extra,
   };
 }
@@ -123,27 +134,37 @@ function baseOption(opt) {
   };
 }
 const valueAxis = (formatter = fmt.compact, extra = {}) => ({
-  type: "value", axisLabel: { color: T.text3, formatter, fontSize: 11 }, splitLine: { lineStyle: { color: T.grid } },
+  type: "value", axisLabel: { color: T.text3, formatter, fontSize: 10.5, fontFamily: T.mono }, splitLine: { lineStyle: { color: T.grid } },
+  splitNumber: 4, boundaryGap: ["8%", "8%"],
   axisLine: { show: false }, axisTick: { show: false }, ...extra,
 });
 const catAxis = (data, extra = {}) => ({
-  type: "category", data, axisLine: { lineStyle: { color: T.axis } }, axisTick: { show: false },
+  type: "category", data, axisLine: { onZero: false, lineStyle: { color: T.axis } }, axisTick: { show: false },
   // Few categories: show every label (wrapped) instead of letting ECharts skip some.
-  axisLabel: { color: T.text3, fontSize: 11, ...(data.length <= 12 ? { interval: 0, width: 86, overflow: "break", lineHeight: 14 } : {}) },
+  axisLabel: { color: T.text2, fontSize: 11, margin: 10, ...(data.length <= 12 ? { interval: 0, width: 86, overflow: "break", lineHeight: 14 } : {}) },
   ...extra,
 });
 const timeAxis = (extra = {}) => ({
   type: "time", axisLine: { lineStyle: { color: T.axis } }, axisTick: { show: false }, splitLine: { show: false },
-  axisLabel: { color: T.text3, fontSize: 11, hideOverlap: true }, ...extra,
+  axisLabel: { color: T.text3, fontSize: 10.5, fontFamily: T.mono, hideOverlap: true }, ...extra,
 });
 const signColor = (v) => (v >= 0 ? T.gain : T.loss);
-const signBar = (v, horizontal = false) => ({
-  value: v,
-  itemStyle: { color: signColor(v), borderRadius: horizontal ? (v >= 0 ? [0, 4, 4, 0] : [4, 0, 0, 4]) : (v >= 0 ? [4, 4, 0, 0] : [0, 0, 4, 4]) },
+const tipRadius = (v, horizontal) => (horizontal ? (v >= 0 ? [0, 4, 4, 0] : [4, 0, 0, 4]) : (v >= 0 ? [4, 4, 0, 0] : [0, 0, 4, 4]));
+const signBar = (v, horizontal = false, color = signColor(v)) => ({
+  value: v, itemStyle: { color: barFill(color, v, horizontal), borderRadius: tipRadius(v, horizontal) },
 });
-const zeroLine = { silent: true, symbol: "none", label: { show: false }, lineStyle: { color: "rgba(255,255,255,0.32)", type: "solid", width: 1 }, data: [{ yAxis: 0 }] };
-const ttRow = (label, value) => `<div style="display:flex;justify-content:space-between;gap:18px"><span style="color:${T.text3}">${esc(label)}</span><b style="font-weight:600">${value}</b></div>`;
-const ttHead = (t) => `<div style="margin-bottom:4px;font-weight:600">${esc(t)}</div>`;
+// Label only the best and the worst bar; the rest is on hover.
+function extremeLabels(data, horizontal, format) {
+  const vals = data.map((d) => d.value);
+  const hi = vals.indexOf(Math.max(...vals)), lo = vals.indexOf(Math.min(...vals));
+  return data.map((d, i) => (i === hi || i === lo) && vals.length > 2 ? { ...d, label: { show: true, formatter: format(d.value),
+    position: horizontal ? (d.value >= 0 ? "right" : "left") : (d.value >= 0 ? "top" : "bottom"),
+    color: T.text1, fontSize: 10.5, fontFamily: T.mono, distance: 6 } } : d);
+}
+const zeroLine = { silent: true, symbol: "none", label: { show: false }, lineStyle: { color: "rgba(255,255,255,0.28)", type: "solid", width: 1 }, data: [{ yAxis: 0 }] };
+const zeroLineX = { ...zeroLine, data: [{ xAxis: 0 }] };
+const ttRow = (label, value) => `<div style="display:flex;justify-content:space-between;gap:20px;line-height:1.7"><span style="color:${T.text3}">${esc(label)}</span><b style="font-weight:500;font-family:Geist Mono,monospace;font-size:11.5px">${value}</b></div>`;
+const ttHead = (t) => `<div style="margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.08);font-weight:550">${esc(t)}</div>`;
 
 function chartBox(id, cls = "", label = "") {
   return `<div class="chart ${cls}" id="${id}" role="img" aria-label="${esc(label)}"></div>`;
@@ -181,8 +202,8 @@ function cumPnlChart(daily, ccy) {
       return ttHead(fmt.date(d.date)) + ttRow("Cumulative PnL", `${fmt.money(d.cum_pnl)} ${ccy}`) + ttRow("That day", fmt.money(d.pnl)) + ttRow("Fills", fmt.int(d.fills));
     } },
     series: [{
-      type: "line", data, showSymbol: false, lineStyle: { width: 2, color: T.accent }, itemStyle: { color: T.accent },
-      areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(240,122,53,0.32)" }, { offset: 1, color: "rgba(240,122,53,0.02)" }]) },
+      type: "line", data, showSymbol: false, lineStyle: { width: 1.75, color: T.accent }, itemStyle: { color: T.accent }, smooth: 0.15,
+      areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(240,122,53,0.22)" }, { offset: 1, color: "rgba(240,122,53,0)" }]) },
       markLine: zeroLine,
     }],
   };
@@ -198,7 +219,7 @@ function dailyPnlChart(daily, ccy) {
       const d = daily[p[0].dataIndex];
       return ttHead(fmt.date(d.date)) + ttRow("Net PnL", `${fmt.money(d.pnl)} ${ccy}`) + ttRow("Gross", fmt.money(d.gross)) + ttRow("Fees", fmt.money(d.fees)) + ttRow("Funding", fmt.money(d.funding, 3));
     } },
-    series: [{ type: "bar", barMaxWidth: 10, data: daily.map((d) => ({ value: [d.date, d.pnl], itemStyle: { color: signColor(d.pnl), borderRadius: d.pnl >= 0 ? [3, 3, 0, 0] : [0, 0, 3, 3] } })) }],
+    series: [{ type: "bar", barMaxWidth: 8, ...barHover, data: daily.map((d) => ({ value: [d.date, d.pnl], itemStyle: { color: rgba(signColor(d.pnl), 0.9), borderRadius: d.pnl >= 0 ? [2, 2, 0, 0] : [0, 0, 2, 2] } })) }],
   };
 }
 function bucketChart(rows, key, valKey = "net_pnl", { ccy = "", horizontal = false, labelFmt = (x) => x, valueFmt = fmt.money } = {}) {
@@ -212,14 +233,16 @@ function bucketChart(rows, key, valKey = "net_pnl", { ccy = "", horizontal = fal
     if (isNum(r.avg_pnl) && valKey !== "avg_pnl") h += ttRow("Avg per trade", fmt.money(r.avg_pnl, 3));
     return h;
   };
-  const data = rows.map((r) => signBar(r[valKey], horizontal));
+  const data = extremeLabels(rows.map((r) => signBar(r[valKey], horizontal)), horizontal, fmt.compact);
   return horizontal ? {
-    xAxis: valueAxis(), yAxis: catAxis(cats, { inverse: true, axisLabel: { color: T.text2, fontSize: 11 } }),
+    xAxis: valueAxis(), yAxis: catAxis(cats, { inverse: true, axisLine: { show: false, onZero: false } }),
+    grid: { left: 6, right: 40, top: 6, bottom: 6, containLabel: true },
     tooltip: { trigger: "item", formatter: tip },
-    series: [{ type: "bar", data, barMaxWidth: 16, barCategoryGap: "28%" }],
+    series: [{ type: "bar", data, barMaxWidth: 14, barCategoryGap: "38%", markLine: zeroLineX, ...barHover }],
   } : {
     xAxis: catAxis(cats), yAxis: valueAxis(), tooltip: { trigger: "item", formatter: tip },
-    series: [{ type: "bar", data, barMaxWidth: 34, barCategoryGap: "30%", markLine: zeroLine }],
+    grid: { left: 6, right: 14, top: 22, bottom: 6, containLabel: true },
+    series: [{ type: "bar", data, barMaxWidth: rows.length > 12 ? 14 : 26, barCategoryGap: "42%", markLine: zeroLine, ...barHover }],
   };
 }
 function winRateChart(rows, key, breakeven, labelFmt = (x) => x) {
@@ -233,10 +256,11 @@ function winRateChart(rows, key, breakeven, labelFmt = (x) => x) {
       return ttHead(cats[p.dataIndex]) + ttRow("Win rate", fmt.pct(r.win_rate)) + (be != null ? ttRow("Break-even", fmt.pct(be)) : "") + ttRow("Trades", fmt.int(r.trades));
     } },
     series: [{
-      type: "bar", barMaxWidth: 34, barCategoryGap: "30%",
-      data: rows.map((r) => ({ value: r.win_rate, itemStyle: { color: be != null && r.win_rate >= be ? T.gain : be != null ? T.loss : T.accent, borderRadius: [4, 4, 0, 0] } })),
-      markLine: be == null ? undefined : { silent: true, symbol: "none", lineStyle: { color: T.text1, type: "dashed", width: 1.5 },
-        label: { formatter: `Break-even ${fmt.pct(be)}`, color: T.text1, fontSize: 11, position: "insideEndTop" }, data: [{ yAxis: be }] },
+      type: "bar", barMaxWidth: 26, barCategoryGap: "42%", ...barHover,
+      data: rows.map((r) => ({ value: r.win_rate, itemStyle: { color: barFill(be != null && r.win_rate >= be ? T.gain : be != null ? T.loss : T.accent, 1, false), borderRadius: [4, 4, 0, 0] },
+        label: { show: true, position: "top", formatter: fmt.pct(r.win_rate), color: T.text2, fontSize: 10.5, fontFamily: T.mono, distance: 6 } })),
+      markLine: be == null ? undefined : { silent: true, symbol: "none", lineStyle: { color: "rgba(244,242,238,0.7)", type: [4, 4], width: 1 },
+        label: { formatter: `Break-even ${fmt.pct(be)}`, color: T.text2, fontSize: 10.5, fontFamily: T.mono, position: "insideStartTop" }, data: [{ yAxis: be }] },
     }],
   };
 }
@@ -264,7 +288,7 @@ function heatmapChart(rows, ccy) {
       if (!r) return ttHead(`${days[p.value[1]]} ${hours[p.value[0]]}:00`) + "No trades";
       return ttHead(`${days[p.value[1]]} ${hours[p.value[0]]}:00 UTC`) + ttRow("Net PnL", `${fmt.money(r.net_pnl)} ${ccy}`) + ttRow("Trades", fmt.int(r.trades)) + ttRow("Win rate", fmt.pct(r.win_rate));
     } },
-    series: [{ type: "heatmap", data, itemStyle: { borderColor: "rgba(20,21,25,0.6)", borderWidth: 2, borderRadius: 3 }, emphasis: { itemStyle: { borderColor: T.text1, borderWidth: 1 } } }],
+    series: [{ type: "heatmap", data, itemStyle: { borderColor: "rgba(16,17,20,0.55)", borderWidth: 2, borderRadius: 4 }, emphasis: { itemStyle: { borderColor: T.text1, borderWidth: 1 } } }],
   };
 }
 function kpi(label, value, { unit = "", foot = "", tone = null, meter = null, text = false } = {}) {
@@ -378,7 +402,9 @@ function pageTiming(r) {
     queueChart("c-mkt", {
       xAxis: catAxis(m.rows.map((d) => d.weekday.slice(0, 3))), yAxis: valueAxis((v) => fmt.pct(v, 1)),
       tooltip: { trigger: "item", formatter: (p) => { const d = m.rows[p.dataIndex]; return ttHead(`${d.weekday}, ${m.symbol.replace("USDT", "")}`) + ttRow("Average move", fmt.pct(d.avg_return, 2, true)) + ttRow("Green days", fmt.pct(d.up_share)) + ttRow("Days measured", fmt.int(d.days)); } },
-      series: [{ type: "bar", barMaxWidth: 34, data: m.rows.map((d) => signBar(d.avg_return)), markLine: zeroLine }],
+      grid: { left: 6, right: 14, top: 22, bottom: 6, containLabel: true },
+      series: [{ type: "bar", barMaxWidth: 26, barCategoryGap: "42%", ...barHover, markLine: zeroLine,
+        data: extremeLabels(m.rows.map((d) => signBar(d.avg_return)), false, (v) => fmt.pct(v, 2, true)) }],
     });
     market = chartBox("c-mkt", "", "Average BTC daily move by weekday");
   }
@@ -407,11 +433,13 @@ function pageAssets(r) {
   queueChart("c-acpnl", bucketChart(byPnl, "asset_class", "net_pnl", { ccy, horizontal: true }));
   const byCount = [...ac].sort((a, b) => b.trades - a.trades);
   queueChart("c-account", {
-    xAxis: valueAxis((v) => `${Math.round(v * 100)}%`), yAxis: catAxis(byCount.map((d) => d.asset_class), { inverse: true, axisLabel: { color: T.text2, fontSize: 11 } }),
+    xAxis: valueAxis((v) => `${Math.round(v * 100)}%`), yAxis: catAxis(byCount.map((d) => d.asset_class), { inverse: true, axisLine: { show: false, onZero: false } }),
     grid: { left: 6, right: 48, top: 6, bottom: 6, containLabel: true },
     tooltip: { trigger: "item", formatter: (p) => { const d = byCount[p.dataIndex]; return ttHead(d.asset_class) + ttRow("Share of trades", fmt.pct(d.share, 1)) + ttRow("Trades", fmt.int(d.trades)) + ttRow("Coins", fmt.int(d.symbols)); } },
-    series: [{ type: "bar", barMaxWidth: 16, data: byCount.map((d) => ({ value: d.share, itemStyle: { color: T.accent, borderRadius: [0, 4, 4, 0] } })),
-      label: { show: true, position: "right", color: T.text2, fontSize: 11, formatter: (p) => fmt.pct(p.value) } }],
+    series: [{ type: "bar", barMaxWidth: 14, barCategoryGap: "38%", ...barHover,
+      showBackground: true, backgroundStyle: { color: "rgba(255,255,255,0.04)", borderRadius: 4 },
+      data: byCount.map((d) => ({ value: d.share, itemStyle: { color: barFill("#ece8e1", 1, true), borderRadius: [0, 4, 4, 0] } })),
+      label: { show: true, position: "right", color: T.text2, fontSize: 10.5, fontFamily: T.mono, formatter: (p) => fmt.pct(p.value) } }],
   });
   const classCols = [
     { key: "asset_class", label: "Asset class" }, { key: "trades", label: "Trades", num: true, fmt: fmt.int },
@@ -529,23 +557,28 @@ function skeleton() {
 function renderPages() {
   $("#pages").innerHTML = PAGES.map((p) => `<button class="pane-btn" type="button" data-page="${p.id}" ${p.id === state.page ? 'aria-current="page"' : ""}>${icon(p.id)}<span class="txt">${esc(p.label)}</span></button>`).join("");
 }
+function sourceInfo(k) {
+  const src = state.sources || {}, info = { ...SOURCE_INFO[k] };
+  if (k === "owner" && src.owner_meta?.label) info.label = src.owner_meta.label;
+  if (k === "owner" && src.owner_meta?.published_at) info.detail = `Snapshot, ${fmt.date(Date.parse(src.owner_meta.published_at))}`;
+  if (["api", "csv"].includes(k) && state.source === k && state.report) info.detail = state.report.meta.source.detail || info.detail;
+  return info;
+}
 function renderSources() {
   const src = state.sources || {};
   const order = ["owner", "local", "demo", "api", "csv"].filter((k) => src[k]);
   $("#sources").innerHTML = order.map((k) => {
-    const info = { ...SOURCE_INFO[k] };
-    if (k === "owner" && src.owner_meta?.label) info.label = src.owner_meta.label;
-    if (k === "owner" && src.owner_meta?.published_at) info.detail = `Snapshot, ${fmt.date(Date.parse(src.owner_meta.published_at))}`;
-    if (k === "api" && state.source === "api" && state.report) info.detail = state.report.meta.source.detail || info.detail;
-    if (k === "csv" && state.source === "csv" && state.report) info.detail = state.report.meta.source.detail || info.detail;
-    return `<button class="pane-btn" type="button" data-source="${k}" aria-pressed="${state.source === k}">${icon(k)}<span class="txt">${esc(info.label)}<small>${esc(info.detail)}</small></span></button>`;
+    const info = sourceInfo(k), on = state.source === k;
+    return `<button class="src-opt" type="button" role="option" data-source="${k}" aria-selected="${on}">${icon(k)}<span class="txt">${esc(info.label)}<small>${esc(info.detail)}</small></span>${on ? icon("tick", "i tick") : ""}</button>`;
   }).join("");
+  const cur = state.source ? sourceInfo(state.source) : { label: "Choose data", detail: "" };
+  $("#sourceBtn").innerHTML = `${icon(state.source || "database")}<span class="txt">${esc(cur.label)}<small>${esc(cur.detail)}</small></span>${icon("swap", "i end")}`;
 }
 function renderFilters() {
   const r = state.report, meta = r?.meta;
   const presets = [["all", "All"], [90, "90D"], [30, "30D"], [7, "7D"]];
   const active = activePreset();
-  $("#presets").innerHTML = presets.map(([k, l]) => `<button class="pane-btn" type="button" data-preset="${k}" aria-pressed="${active === String(k)}" ${meta ? "" : "disabled"}>${l}</button>`).join("");
+  $("#presets").innerHTML = presets.map(([k, l]) => `<button class="seg-btn" type="button" data-preset="${k}" aria-pressed="${active === String(k)}" ${meta ? "" : "disabled"}>${l}</button>`).join("");
   const from = $("#from"), to = $("#to");
   if (meta) {
     const lo = fmt.iso(meta.data_start), hi = fmt.iso(meta.data_end);
@@ -584,14 +617,10 @@ function renderHeader() {
   const r = state.report;
   if (!r) { $("#pageSub").textContent = page.sub; $("#chips").innerHTML = ""; return; }
   $("#pageSub").textContent = page.sub;
-  const s = r.summary, src = r.meta.source || {};
-  const chips = [`<span class="chip">${icon(src.kind === "demo" ? "demo" : src.kind || "database")}<b>${esc(src.label || "Data")}</b></span>`];
-  if (!r.empty) {
-    chips.push(`<span class="chip">${icon("calendar")}${fmt.date(s.start)} to ${fmt.date(s.end)}</span>`);
-    chips.push(`<span class="chip">${fmt.int(s.trades)} trades, ${fmt.int(s.symbols_traded)} symbols</span>`);
-  }
-  if (r.meta.filters.symbols.length) chips.push(`<span class="chip">${icon("filter")}${r.meta.filters.symbols.length} symbols</span>`);
-  if (src.kind === "demo") chips.push(`<span class="chip">${icon("info")}Synthetic, not a real account</span>`);
+  const s = r.summary, bits = [];
+  if (!r.empty) bits.push(`${fmt.date(s.start)} to ${fmt.date(s.end)}`, `${fmt.int(s.trades)} trades`, `${fmt.int(s.symbols_traded)} symbols`);
+  if (r.meta.filters.symbols.length) bits.push(`${r.meta.filters.symbols.length} selected`);
+  const chips = [bits.map((b) => `<span>${esc(b)}</span>`).join('<i aria-hidden="true"></i>')];
   $("#chips").innerHTML = chips.join("");
 }
 function renderView() {
@@ -675,7 +704,8 @@ function selectSource(k) {
 }
 
 /* ---------------------------------------------------------- dialogs */
-const dlg = $("#apiDialog");
+const dlg = $("#apiDialog"), srcDlg = $("#sourceDialog");
+srcDlg.addEventListener("click", (e) => { if (e.target === srcDlg) srcDlg.close(); });
 function openApiDialog() { $("#apiError").textContent = ""; dlg.showModal(); $("#apiKey").focus(); }
 function clearApiForm() { $("#apiKey").value = ""; $("#apiSecret").value = ""; }
 $("#apiCancel").addEventListener("click", () => { clearApiForm(); dlg.close(); });
@@ -750,7 +780,9 @@ document.addEventListener("click", (e) => {
   const t = e.target.closest("button");
   if (!t) return;
   if (t.dataset.page) goPage(t.dataset.page);
-  else if (t.dataset.source) { selectSource(t.dataset.source); closePane(); }
+  else if (t.dataset.source) { srcDlg.close(); selectSource(t.dataset.source); closePane(); }
+  else if (t.id === "sourceBtn") { renderSources(); srcDlg.showModal(); ($(".src-opt[aria-selected=true]") || $(".src-opt"))?.focus(); }
+  else if (t.id === "srcClose") srcDlg.close();
   else if (t.dataset.preset) {
     const meta = state.report?.meta;
     if (!meta) return;

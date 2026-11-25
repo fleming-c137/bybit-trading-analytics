@@ -8,8 +8,8 @@
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700&display=swap">
-  <link rel="stylesheet" href="assets/styles.css?v=0.5.1">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap">
+  <link rel="stylesheet" href="assets/styles.css?v=0.6.0">
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -20,7 +20,7 @@
     <aside class="pane" id="pane" aria-label="Options">
       <div class="brand">
         <svg class="brand-mark" viewBox="0 0 36 36" aria-hidden="true">
-          <rect x="1" y="1" width="34" height="34" rx="10" fill="rgba(255,255,255,0.08)" stroke="rgba(255,157,99,0.7)"/>
+          <rect x="1" y="1" width="34" height="34" rx="10" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.22)"/>
           <path d="M11 9v18M18 7v22M25 11v14" stroke="rgba(244,242,238,0.5)" stroke-width="1.5" stroke-linecap="round"/>
           <rect x="8.5" y="14" width="5" height="8" rx="1.5" fill="#e66767"/>
           <rect x="15.5" y="11" width="5" height="11" rx="1.5" fill="#199e70"/>
@@ -33,37 +33,29 @@
       </div>
 
       <section class="pane-group" aria-labelledby="lbl-pages">
-        <h2 class="pane-label" id="lbl-pages">Pages</h2>
+        <h2 class="pane-label" id="lbl-pages">Analysis</h2>
         <nav class="pages" id="pages" aria-label="Pages"></nav>
       </section>
 
-      <section class="pane-group" aria-labelledby="lbl-source">
-        <h2 class="pane-label" id="lbl-source">Data source</h2>
-        <div class="pane-group" id="sources"></div>
-      </section>
-
-      <section class="pane-group" aria-labelledby="lbl-period">
-        <h2 class="pane-label" id="lbl-period">Period (UTC)</h2>
+      <section class="pane-group" aria-labelledby="lbl-filters">
+        <h2 class="pane-label" id="lbl-filters">Filters</h2>
         <div class="seg" id="presets" role="group" aria-label="Quick periods"></div>
         <div class="dates">
-          <label class="field"><span style="width:34px">From</span><input class="input" type="date" id="from"></label>
-          <label class="field"><span style="width:34px">To</span><input class="input" type="date" id="to"></label>
+          <label class="field"><span>From</span><input class="input" type="date" id="from"></label>
+          <label class="field"><span>To</span><input class="input" type="date" id="to"></label>
         </div>
-      </section>
-
-      <section class="pane-group" aria-labelledby="lbl-symbols">
-        <h2 class="pane-label" id="lbl-symbols">Symbols</h2>
         <button class="pane-btn" id="symBtn" aria-expanded="false" aria-controls="symPanel"></button>
         <div class="sym-panel" id="symPanel" hidden>
           <input class="input" type="search" id="symSearch" placeholder="Search symbols" aria-label="Search symbols">
           <div class="sym-list" id="symList" role="group" aria-label="Symbols"></div>
           <div class="row-between"><span class="note" id="symCount"></span><button class="linkbtn" id="symClear" type="button">Clear selection</button></div>
         </div>
+        <label class="field ccy" id="ccyGroup" hidden><span>Currency</span><select class="select" id="currency"></select></label>
       </section>
 
-      <section class="pane-group" id="ccyGroup" aria-labelledby="lbl-ccy" hidden>
-        <h2 class="pane-label" id="lbl-ccy">Settlement currency</h2>
-        <select class="select" id="currency" aria-labelledby="lbl-ccy"></select>
+      <section class="pane-group pane-source" aria-labelledby="lbl-source">
+        <h2 class="pane-label" id="lbl-source">Data</h2>
+        <button class="pane-btn" id="sourceBtn" type="button" aria-haspopup="dialog"></button>
       </section>
 
       <div class="pane-foot">
@@ -90,6 +82,15 @@
       <div id="view" class="grid"></div>
     </main>
   </div>
+
+  <dialog class="glass" id="sourceDialog" aria-labelledby="srcTitle">
+    <div class="dlg">
+      <div class="row-between"><h2 id="srcTitle">Data source</h2>
+        <button class="icon-btn" type="button" id="srcClose" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <p>Choose whose trades to analyse.</p>
+      <div class="src-list" id="sources" role="listbox" aria-label="Data sources"></div>
+    </div>
+  </dialog>
 
   <dialog class="glass" id="apiDialog" aria-labelledby="apiTitle">
     <form class="dlg" id="apiForm" method="dialog" autocomplete="off">
@@ -120,6 +121,6 @@
   <input type="file" id="csvInput" accept=".csv,text/csv" hidden>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
-  <script src="assets/app.js?v=0.5.1" type="module"></script>
+  <script src="assets/app.js?v=0.6.0" type="module"></script>
 </body>
 </html>
