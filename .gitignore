@@ -20,9 +20,6 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 
-# Streamlit
-.streamlit/secrets.toml
-
 # OS / editors
 .DS_Store
 Thumbs.db

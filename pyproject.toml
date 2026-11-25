@@ -15,6 +15,10 @@ dependencies = [
     "python-dotenv>=1.0",
 ]
 
+[project.urls]
+Homepage = "https://bybit-trading-analytics.vercel.app"
+Repository = "https://github.com/fleming-c137/bybit-trading-analytics"
+
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 

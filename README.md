@@ -7,7 +7,7 @@ this trading have an edge, and if not, where exactly does the money go?**
 
 ![Dashboard overview (demo data)](docs/dashboard-overview.png)
 
-**Live dashboard:** [bybit-trading-analytics-freddie-6da8.vercel.app](https://bybit-trading-analytics-freddie-6da8.vercel.app)
+**Live dashboard:** [bybit-trading-analytics.vercel.app](https://bybit-trading-analytics.vercel.app)
 (demo data by default; analyse your own account with a read-only API key or a CSV export).
 
 > Started as a one-off Colab notebook that explored a downloaded CSV ("how many
