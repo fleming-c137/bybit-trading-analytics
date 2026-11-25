@@ -2,14 +2,14 @@
 :root {
   color-scheme: light;
   /* surfaces: off-white page, light-grey frosted glass */
-  --bg-0: #f3f1ed;
-  --bg-1: #e9e7e2;
+  --bg-0: #efefee;
+  --bg-1: #dededc;
   --glass: rgba(255, 255, 255, 0.46);
   --glass-2: rgba(255, 255, 255, 0.62);
   --glass-border: rgba(255, 255, 255, 0.78);
   --glass-border-2: rgba(40, 36, 30, 0.14);
   --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 0 1px rgba(40, 36, 30, 0.06);
-  --pane: rgba(226, 223, 218, 0.5);
+  --pane: rgba(255, 255, 255, 0.32);
   --sub: rgba(40, 36, 30, 0.035);
   --line: rgba(40, 36, 30, 0.08);
   /* option-pane buttons: same glass, denser than the pane */
@@ -64,10 +64,10 @@ svg.i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor;
 /* ---------------------------------------------------------- backdrop */
 .backdrop { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
 .orb { position: absolute; border-radius: 50%; filter: blur(90px); }
-.orb.o1 { width: 640px; height: 640px; left: -160px; top: -220px; background: #ffb07a; opacity: 0.38; }
-.orb.o2 { width: 620px; height: 620px; right: -180px; top: 14%; background: #cfcac2; opacity: 0.7; }
-.orb.o3 { width: 600px; height: 600px; left: 30%; bottom: -300px; background: #ffd2ad; opacity: 0.45; }
-.orb.o4 { width: 460px; height: 460px; left: 48%; top: 28%; background: #ffffff; opacity: 0.8; }
+.orb.o1 { width: 640px; height: 640px; left: -160px; top: -220px; background: #ffffff; opacity: 0.95; }
+.orb.o2 { width: 620px; height: 620px; right: -180px; top: 14%; background: #b9b9b7; opacity: 0.55; }
+.orb.o3 { width: 600px; height: 600px; left: 30%; bottom: -300px; background: #c8c8c6; opacity: 0.6; }
+.orb.o4 { width: 460px; height: 460px; left: 48%; top: 28%; background: #ffffff; opacity: 0.85; }
 .backdrop::after { content: ""; position: absolute; inset: 0;
   background-image: radial-gradient(rgba(40,36,30,0.035) 1px, transparent 1px);
   background-size: 3px 3px; }
