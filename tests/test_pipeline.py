@@ -231,3 +231,31 @@ def test_handle_rejects_bad_input():
     assert webapi.handle({"source": "local"}, allow_local=False)[0] == 404
     assert webapi.handle({"source": "nope"})[0] == 400
     assert webapi.handle({"source": "dataset", "dataset": "garbage"})[0] == 400
+
+
+# ------------------------------------------------------------ trader views
+from bybit_analytics.assets import asset_class, base_asset  # noqa: E402
+from bybit_analytics import trader as TR  # noqa: E402
+
+
+def test_asset_classes():
+    assert asset_class("BTCUSDT") == "Bitcoin"
+    assert asset_class("1000PEPEUSDT") == "Memecoins"
+    assert asset_class("SHIB1000USDT") == "Memecoins"
+    assert asset_class("10000UNKNOWNUSDT") == "Memecoins"   # multiplier tickers are memecoins
+    assert asset_class("SOLUSDT") == "Large caps"
+    assert asset_class("ZZZNEWUSDT") == "Small caps & new listings"
+    assert base_asset("1000000MOGUSDT") == ("MOG", True)
+
+
+def test_trader_report_sections(demo_ds):
+    r = build_report(prepare(demo_ds))
+    assert len(r["by_hour"]) == 24 and [d["weekday"] for d in r["by_weekday"]][0] == "Monday"
+    assert {d["session"] for d in r["by_session"]} <= {"Asia", "London", "New York", "Late US"}
+    assert abs(sum(d["share"] for d in r["by_asset_class"]) - 1) < 1e-6
+    assert sum(d["trades"] for d in r["by_asset_class"]) == r["summary"]["trades"]
+    assert r["summary"]["wins"] + r["summary"]["losses"] == r["summary"]["trades"]
+    assert r["market_weekdays"]["available"] and r["market_weekdays"]["pump"] in TR.WEEKDAYS
+    for row in r["best_worst"]:
+        assert row["best"]["net_pnl"] >= row["worst"]["net_pnl"]
+    assert r["verdict"]["title"].startswith(("Losing money", "Profitable"))

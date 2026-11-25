@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from . import analysis as A
+from . import trader as T
 from .trades import build_round_trips
 from .transform import CLOSED_PNL_COLUMNS, TX_COLUMNS, is_flow_type, main_currency, trading_scope
 
@@ -226,39 +227,25 @@ def build_report(p: Prepared, start: str | None = None, end: str | None = None,
     s = A.account_summary(tx, rounds)
     s["currency"] = p.currency
     payoff = s["payoff_ratio"]
-    breakeven = 1 / (1 + payoff) if payoff == payoff and payoff is not None else None
-    s["breakeven_win_rate"] = breakeven
-    days = A.daily_series(tx)
+    s["breakeven_win_rate"] = 1 / (1 + payoff) if payoff == payoff and payoff else None
     c = A.closed(rounds)
+    s["wins"] = int((c["net_pnl"] > 0).sum())
+    s["losses"] = int((c["net_pnl"] <= 0).sum())
+    days = A.daily_series(tx)
 
     sym = A.by_symbol(rounds)
-    conc = A.loss_concentration(sym, 5)
-    losers = sym[sym["net_pnl"] < 0].sort_values("net_pnl")
-    total_loss = losers["net_pnl"].sum()
-    losers = losers.assign(share=losers["net_pnl"] / total_loss if total_loss else np.nan)
-
+    tables = {
+        "hour": T.by_hour(rounds), "weekday": T.by_weekday(rounds), "session": T.by_session(rounds),
+        "asset_class": T.by_asset_class(rounds), "symbol": sym, "direction": A.by_direction(rounds),
+        "hold": T.by_holding_time(rounds),
+    }
+    tilt = A.after_loss_behaviour(rounds, tilt_window)
     ot = A.overtrading(tx, rounds)
-    ot_buckets = (ot.groupby("trade_bucket", observed=True)["pnl"]
-                  .agg(days="size", avg_pnl="mean", total="sum").reset_index()) if not ot.empty else pd.DataFrame()
-
-    kl = ds.klines
-    market: dict = {"available": False}
-    if kl is not None and not kl.empty:
-        mc = A.market_context(days, kl)
-        if len(mc) >= 3:
-            market = {
-                "available": True,
-                "corr": mc["pnl"].corr(mc["btc_return"]),
-                "up_avg": mc.loc[mc["btc_return"] > 0, "pnl"].mean(),
-                "down_avg": mc.loc[mc["btc_return"] <= 0, "pnl"].mean(),
-                "days": _records(mc, ["date", "pnl", "btc_return", "btc_range", "close"]),
-                "by_move": _records(mc.groupby("btc_move", observed=True)["pnl"]
-                                    .agg(days="size", avg_pnl="mean", total="sum").reset_index())
-                if "btc_move" in mc else [],
-                "by_vol": _records(mc.groupby("btc_vol", observed=True)["pnl"]
-                                   .agg(days="size", avg_pnl="mean", total="sum").reset_index())
-                if "btc_vol" in mc else [],
-            }
+    busy = (ot.groupby("trade_bucket", observed=True)["pnl"]
+            .agg(days="size", avg_pnl="mean", total="sum").reset_index()) if not ot.empty else pd.DataFrame()
+    mkt = T.market_weekdays(ds.klines, lo or tx["time"].min(), hi)
+    if mkt.get("available"):
+        mkt["rows"] = _records(mkt["rows"])
 
     cp = ds.closed_pnl
     if cp is not None and not cp.empty:
@@ -270,29 +257,23 @@ def build_report(p: Prepared, start: str | None = None, end: str | None = None,
         "meta": meta,
         "empty": False,
         "summary": s,
-        "verdict": _verdict(s, breakeven),
-        "insights": A.insights(tx, rounds, kl),
-        "daily": _records(days, ["date", "pnl", "gross", "fees", "funding", "flows", "fills", "balance",
-                                 "cum_pnl", "drawdown_usdt", "equity_index", "active"]),
-        "waterfall": _records(A.pnl_waterfall(s)),
-        "by_symbol": _records(sym),
-        "loss_concentration": conc,
-        "top_losers": _records(losers.head(12), ["symbol", "net_pnl", "share", "trades"]),
-        "by_direction": _records(A.by_direction(rounds)),
-        "by_duration": _records(A.by_duration(rounds)),
-        "hold_winners_losers": _records(A.winners_vs_losers_hold(rounds)),
-        "by_size": _records(A.by_size(rounds)),
-        "by_hour": _records(A.by_hour(rounds)),
+        "verdict": T.plain_verdict(s, p.currency),
+        "recent": T.recent(days),
+        "highlights": T.highlights(s, tables, tilt, busy, p.currency),
+        "best_worst": T.best_worst(tables),
+        "daily": _records(days, ["date", "pnl", "gross", "fees", "funding", "fills", "cum_pnl", "drawdown_usdt"]),
+        "by_hour": _records(tables["hour"]),
+        "by_weekday": _records(tables["weekday"]),
+        "by_session": _records(tables["session"]),
         "by_hour_weekday": _records(A.by_hour_weekday(rounds)),
-        "tilt": _records(A.after_loss_behaviour(rounds, tilt_window)),
-        "overtrading": {
-            "corr": ot["trades"].corr(ot["pnl"]) if len(ot) >= 5 else None,
-            "days": _records(ot, ["date", "trades", "pnl"]) if not ot.empty else [],
-            "buckets": _records(ot_buckets),
-        },
-        "market": market,
+        "market_weekdays": mkt,
+        "by_asset_class": _records(tables["asset_class"]),
+        "by_symbol": _records(sym),
+        "by_direction": _records(tables["direction"]),
+        "by_holding_time": _records(tables["hold"]),
+        "tilt": _records(tilt),
+        "busy_days": _records(busy),
         "by_leverage": _records(A.by_leverage(cp)),
-        "liquidations": _table(c[c["liquidated"].astype(bool)].sort_values("net_pnl"), TRADE_FIELDS),
         "trades": _table(c.sort_values("close_time"), TRADE_FIELDS),
     }
     return _clean(report)

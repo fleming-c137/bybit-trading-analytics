@@ -23,14 +23,14 @@ round-trip trades on 406 USDT perpetuals**.
 | | |
 |---|---|
 | **Net result** | **−3,554 USDT** on 6,515 deposited (−54.6% of deposits) |
-| **Edge** | 20.6% win rate against a **32% break-even** at a 2.12 payoff ratio. Expectancy −0.49 USDT per trade, profit factor 0.55 |
-| **Where it went** | −1,788 from trading itself, **−1,843 in fees** (51% of the damage), +76 funding received |
-| **Holding time** | Trades held **under 15 minutes lost −4,761** with a 6–21% win rate. Trades held **1–24 hours made +1,513** with a 45–67% win rate |
-| **Overtrading** | Correlation between trades per day and that day's PnL: **−0.47**. Busier days are worse days |
+| **Win rate** | 21 of every 100 trades win. Wins are 2.1x the size of losses, so 32 would break even |
+| **Fees** | **1,843 USDT**, about half of the total loss |
+| **Holding time** | Trades closed within an hour lost **5,071**; trades held 1–24 hours made **+1,513** |
+| **When** | Every weekday lost money; Sunday least (−273), Tuesday most (−661). The New York session was the worst (−1,659) |
+| **What** | Most trades are small caps and new listings (35%). Memecoins lost the most (−1,094) |
+| **Busy days** | The more trades in a day, the worse the day (correlation −0.47) |
 | **Direction** | Longs −3,131 vs shorts −423 |
-| **Concentration** | Losses are spread out: 327 of 406 symbols lost money; the worst five account for only 19% |
-| **Risk** | 329 liquidations cost −407 (5% of losing-trade PnL); max drawdown −3,647 |
-| **Market** | Correlation with BTC's daily return: +0.06. The results aren't the market; they're the trading |
+| **The market** | Over 104 weeks BTC rose most on Wednesdays (+0.35% average, 53% green) and fell most on Thursdays (−0.60%) |
 
 **The takeaway:** the losses are not bad luck or one bad coin. They come
 from a fast scalping style whose fee bill alone is as large as its trading loss.
@@ -56,20 +56,22 @@ recommendation is to trade less often and hold longer.
 
 ## The dashboard
 
-The information is ordered by how much it matters:
+Built for a trader to read at a glance, not for a data scientist. Every page answers one question,
+leads with the answer and keeps detail folded away.
 
-1. **Verdict.** One sentence on whether there's an edge, with the gross, fees, funding and net numbers behind it.
-2. **KPIs.** Net PnL, return on deposits, win rate against break-even, profit factor, expectancy, max drawdown.
-3. **Main charts.** Cumulative PnL and where the money went.
-4. **Key findings.** Plain-English findings computed from the data (not hand-written).
-5. **Detail on demand.** Secondary charts and tables are folded into accordions.
-
-Seven pages cover the twelve questions: Overview, Trade quality, Symbols, Timing & behaviour, Risk,
-Market context and Trades. The period, symbol and currency filters recompute every number on the server.
-
-| Trade quality | Timing & behaviour |
+| Page | Answers |
 |---|---|
-| ![Trade quality](docs/dashboard-edge.png) | ![Timing and behaviour](docs/dashboard-timing.png) |
+| **Overview** | Am I making money? A one-line verdict, the last day / 7 days / 30 days, win rate (wins and losses), average win vs loss, fees, biggest drop, PnL over time, *what's working* and *what's costing you*, and a best-vs-worst table by hour, day, session, asset class, coin, direction and holding time |
+| **When to trade** | Best and worst hour and day, results by hour (UTC or your own time zone), by weekday and by session (Asia, London, New York), and **which weekdays the market tends to pump or dump** (BTC average daily move and share of green days) |
+| **What to trade** | Profit by asset class (Bitcoin, Ethereum, large caps, layer 1 & 2, DeFi, AI, memecoins, gaming, small caps & new listings), what you trade most, top and bottom coins, longs vs shorts |
+| **Habits** | How long you hold vs results, win rate right after a loss, busy days, leverage |
+| **Trade log** | Every round trip, searchable and downloadable |
+
+![When to trade](docs/dashboard-timing.png)
+
+| What to trade | Habits |
+|---|---|
+| ![What to trade](docs/dashboard-assets.png) | ![Habits](docs/dashboard-habits.png) |
 
 Screenshots use the synthetic demo account.
 
@@ -86,7 +88,7 @@ Screenshots use the synthetic demo account.
 ## Architecture
 
 ```
-Bybit V5 API ──► client.py ──► transform.py ──► storage.py (SQLite) ──► trades.py ──► analysis.py ──► report.py ──► /api/report ──► public/ (HTML + ECharts)
+Bybit V5 API ──► client.py ──► transform.py ──► storage.py (SQLite) ──► trades.py ──► analysis.py / trader.py ──► report.py ──► /api/report ──► public/ (HTML + ECharts)
 ```
 
 | Module | Responsibility |
@@ -96,6 +98,8 @@ Bybit V5 API ──► client.py ──► transform.py ──► storage.py (SQ
 | `storage.py` | SQLite store with upserts, so re-running `sync` is safe and incremental |
 | `trades.py` | Rebuilds **round-trip trades** (flat → position → flat) from fill-level data using the signed post-trade position size. Handles multi-fill orders, position flips, positions already open when the data starts, and assigns funding payments to the position open at the time |
 | `analysis.py` | All metrics and the 12 questions as pure functions returning DataFrames |
+| `trader.py` | Trader views: sessions, weekdays, market pump/dump days, best-vs-worst, plain-English highlights |
+| `assets.py` | Maps tickers to asset classes (multiplier tickers like `1000PEPE` count as memecoins) |
 | `report.py` | Turns a dataset plus filters into the JSON the dashboard renders; serialises datasets |
 | `webapi.py` | The one API endpoint: data sources, visitor keys, CSV uploads, caching |
 | `server.py` / `api/report.py` | The same endpoint served locally (`serve`) or as a Vercel Python function |

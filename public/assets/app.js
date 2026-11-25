@@ -14,6 +14,8 @@ const ICONS = {
   timing: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   risk: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
   market: '<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>',
+  assets: '<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>',
+  habits: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
   trades: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M12 3v18"/>',
   owner: '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
   demo: '<path d="M10 2v7.31"/><path d="M14 9.3V2"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/><path d="M5.52 16h12.96"/>',
@@ -75,14 +77,12 @@ const fmt = {
 
 /* ------------------------------------------------------------- state */
 const PAGES = [
-  { id: "overview", label: "Overview", sub: "Is the account profitable after all costs, and why?" },
-  { id: "edge", label: "Trade quality", sub: "Is there an edge per trade, and does holding time matter?" },
-  { id: "symbols", label: "Symbols", sub: "Which markets create value and which destroy it?" },
-  { id: "timing", label: "Timing & behaviour", sub: "When do results change, and is there tilt or overtrading?" },
-  { id: "risk", label: "Risk", sub: "How deep and how long are the drawdowns?" },
-  { id: "market", label: "Market context", sub: "Is the PnL just following Bitcoin?" },
-  { id: "trades", label: "Trades", sub: "Every round trip reconstructed from the transaction log" },
-];
+  { id: "overview", label: "Overview", sub: "Am I making money, and what is driving it?" },
+  { id: "timing", label: "When to trade", sub: "Your best hours, days and sessions, and how the market moves each weekday" },
+  { id: "assets", label: "What to trade", sub: "Which asset classes and coins make money, and which you trade most" },
+  { id: "habits", label: "Habits", sub: "Holding time, trading after losses and busy days" },
+  { id: "trades", label: "Trade log", sub: "Every trade, rebuilt from your transaction history" },
+]
 const SOURCE_INFO = {
   owner: { label: "Published account", detail: "Real account snapshot" },
   demo: { label: "Demo account", detail: "Synthetic data" },
@@ -94,7 +94,7 @@ const state = {
   sources: null, source: null, page: "overview", report: null, dataset: null, reqId: 0,
   f: { currency: null, start: null, end: null, symbols: [], tilt: 15 },
   ui: { tradeSort: { key: "close_time", dir: "desc" }, tradePage: 0, tradeQuery: "", tradeOutcome: "all",
-        symSort: { key: "net_pnl", dir: "asc" } },
+        symSort: { key: "net_pnl", dir: "desc" }, localTime: false },
 };
 
 /* ------------------------------------------------------------ charts */
@@ -128,7 +128,9 @@ const valueAxis = (formatter = fmt.compact, extra = {}) => ({
 });
 const catAxis = (data, extra = {}) => ({
   type: "category", data, axisLine: { lineStyle: { color: T.axis } }, axisTick: { show: false },
-  axisLabel: { color: T.text3, fontSize: 11 }, ...extra,
+  // Few categories: show every label (wrapped) instead of letting ECharts skip some.
+  axisLabel: { color: T.text3, fontSize: 11, ...(data.length <= 12 ? { interval: 0, width: 86, overflow: "break", lineHeight: 14 } : {}) },
+  ...extra,
 });
 const timeAxis = (extra = {}) => ({
   type: "time", axisLine: { lineStyle: { color: T.axis } }, axisTick: { show: false }, splitLine: { show: false },
@@ -185,20 +187,6 @@ function cumPnlChart(daily, ccy) {
     }],
   };
 }
-function drawdownChart(daily, ccy) {
-  return {
-    xAxis: timeAxis(), yAxis: valueAxis(),
-    tooltip: { trigger: "axis", formatter: (p) => {
-      const d = daily[p[0].dataIndex];
-      return ttHead(fmt.date(d.date)) + ttRow("Below peak", `${fmt.money(d.drawdown_usdt)} ${ccy}`) + ttRow("Cumulative PnL", fmt.money(d.cum_pnl));
-    } },
-    series: [{
-      type: "line", data: daily.map((d) => [d.date, d.drawdown_usdt]), showSymbol: false,
-      lineStyle: { width: 2, color: T.loss }, itemStyle: { color: T.loss },
-      areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(230,103,103,0.04)" }, { offset: 1, color: "rgba(230,103,103,0.32)" }]) },
-    }],
-  };
-}
 function dailyPnlChart(daily, ccy) {
   return {
     xAxis: timeAxis(), yAxis: valueAxis(),
@@ -211,38 +199,6 @@ function dailyPnlChart(daily, ccy) {
       return ttHead(fmt.date(d.date)) + ttRow("Net PnL", `${fmt.money(d.pnl)} ${ccy}`) + ttRow("Gross", fmt.money(d.gross)) + ttRow("Fees", fmt.money(d.fees)) + ttRow("Funding", fmt.money(d.funding, 3));
     } },
     series: [{ type: "bar", barMaxWidth: 10, data: daily.map((d) => ({ value: [d.date, d.pnl], itemStyle: { color: signColor(d.pnl), borderRadius: d.pnl >= 0 ? [3, 3, 0, 0] : [0, 0, 3, 3] } })) }],
-  };
-}
-function waterfallChart(rows, ccy) {
-  let run = 0;
-  const items = rows.map((r, i) => {
-    const short = { "Gross trading PnL": "Gross", "Trading fees": "Fees", Funding: "Funding", "Net PnL": "Net" }[r.component] || r.component;
-    if (r.measure === "total") return { i, lo: Math.min(0, r.value), hi: Math.max(0, r.value), v: r.value, total: true, name: short, full: r.component };
-    const lo = Math.min(run, run + r.value), hi = Math.max(run, run + r.value);
-    run += r.value;
-    return { i, lo, hi, v: r.value, total: false, name: short, full: r.component };
-  });
-  return {
-    xAxis: catAxis(items.map((d) => d.name), { axisLabel: { color: T.text3, fontSize: 11, interval: 0, width: 80, overflow: "break" } }),
-    yAxis: valueAxis(),
-    grid: { left: 6, right: 10, top: 28, bottom: 6, containLabel: true },
-    tooltip: { trigger: "item", formatter: (p) => ttHead(items[p.dataIndex].full) + ttRow("Amount", `${fmt.money(items[p.dataIndex].v)} ${ccy}`) },
-    series: [{
-      type: "custom", encode: { x: 0, y: [1, 2] },
-      data: items.map((d) => [d.i, d.lo, d.hi, d.v, d.total ? 1 : 0]),
-      renderItem: (params, api) => {
-        const idx = api.value(0), lo = api.value(1), hi = api.value(2), v = api.value(3);
-        const top = api.coord([idx, hi]), bot = api.coord([idx, lo]);
-        const w = api.size([1, 0])[0] * 0.56;
-        const h = Math.max(2, bot[1] - top[1]);
-        return {
-          type: "group", children: [
-            { type: "rect", shape: { x: top[0] - w / 2, y: top[1], width: w, height: h, r: 4 }, style: { fill: signColor(v), opacity: api.value(4) ? 1 : 0.88 } },
-            { type: "text", style: { text: fmt.compact(v), x: top[0], y: top[1] - 6, align: "center", verticalAlign: "bottom", fill: T.text1, font: `600 12px ${T.font}` } },
-          ],
-        };
-      },
-    }],
   };
 }
 function bucketChart(rows, key, valKey = "net_pnl", { ccy = "", horizontal = false, labelFmt = (x) => x, valueFmt = fmt.money } = {}) {
@@ -284,44 +240,6 @@ function winRateChart(rows, key, breakeven, labelFmt = (x) => x) {
     }],
   };
 }
-function histogramChart(values, ccy) {
-  const v = values.filter(isNum).sort((a, b) => a - b);
-  if (!v.length) return null;
-  const q = (p) => v[Math.min(v.length - 1, Math.max(0, Math.floor(p * (v.length - 1))))];
-  let lo = q(0.01), hi = q(0.99);
-  if (lo === hi) { lo -= 1; hi += 1; }
-  const n = 32, w = (hi - lo) / n;
-  const bins = Array.from({ length: n }, (_, i) => ({ a: lo + i * w, b: lo + (i + 1) * w, c: 0 }));
-  let under = 0, over = 0;
-  for (const x of v) {
-    if (x < lo) { under++; bins[0].c++; continue; }
-    if (x > hi) { over++; bins[n - 1].c++; continue; }
-    bins[Math.min(n - 1, Math.floor((x - lo) / w))].c++;
-  }
-  return {
-    xAxis: catAxis(bins.map((b) => fmt.compact((b.a + b.b) / 2)), { axisLabel: { color: T.text3, fontSize: 11, hideOverlap: true } }),
-    yAxis: valueAxis(fmt.int),
-    tooltip: { trigger: "item", formatter: (p) => {
-      const b = bins[p.dataIndex];
-      return ttHead(`${fmt.money(b.a)} to ${fmt.money(b.b)} ${ccy}`) + ttRow("Trades", fmt.int(b.c)) +
-        (p.dataIndex === 0 && under ? ttRow("Includes larger losses", fmt.int(under)) : "") + (p.dataIndex === n - 1 && over ? ttRow("Includes larger wins", fmt.int(over)) : "");
-    } },
-    series: [{ type: "bar", barCategoryGap: "8%", data: bins.map((b) => ({ value: b.c, itemStyle: { color: (b.a + b.b) / 2 >= 0 ? T.gain : T.loss, borderRadius: [3, 3, 0, 0] } })) }],
-  };
-}
-function scatterChart(points, { xName, yName, xFmt = fmt.compact, xLog = false, tip, ccy = "" }) {
-  const win = points.filter((p) => p[1] > 0), lose = points.filter((p) => p[1] <= 0);
-  const large = points.length > 2000;
-  const s = (name, data, color) => ({ name, type: "scatter", data, symbolSize: large ? 5 : 8, large, itemStyle: { color, opacity: 0.72, borderColor: "rgba(10,14,24,.9)", borderWidth: large ? 0 : 1 } });
-  return {
-    legend: { top: 0, right: 0, textStyle: { color: T.text2, fontSize: 12 }, itemWidth: 10, itemHeight: 10, icon: "circle" },
-    grid: { left: 22, right: 16, top: 30, bottom: 22, containLabel: true },
-    xAxis: { ...valueAxis(xFmt), type: xLog ? "log" : "value", name: xName, nameLocation: "middle", nameGap: 26, nameTextStyle: { color: T.text3, fontSize: 11 }, splitLine: { show: false }, axisLine: { lineStyle: { color: T.axis } } },
-    yAxis: { ...valueAxis(), name: yName, nameLocation: "middle", nameGap: 44, nameTextStyle: { color: T.text3, fontSize: 11 } },
-    tooltip: { trigger: "item", formatter: tip || ((p) => ttRow(xName, xFmt(p.value[0])) + ttRow(yName, `${fmt.money(p.value[1])} ${ccy}`)) },
-    series: [s("Winners", win, T.gain), s("Losers", lose, T.loss)],
-  };
-}
 function heatmapChart(rows, ccy) {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const hours = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
@@ -349,20 +267,11 @@ function heatmapChart(rows, ccy) {
     series: [{ type: "heatmap", data, itemStyle: { borderColor: "rgba(8,12,22,0.9)", borderWidth: 2, borderRadius: 3 }, emphasis: { itemStyle: { borderColor: T.text1, borderWidth: 1 } } }],
   };
 }
-function lineChart(points, color, name, valueFmt = fmt.compact) {
-  return {
-    xAxis: timeAxis(), yAxis: valueAxis(valueFmt, { scale: true }),
-    tooltip: { trigger: "axis", formatter: (p) => ttHead(fmt.date(p[0].value[0])) + ttRow(name, fmt.num(p[0].value[1], 0)) },
-    series: [{ type: "line", data: points, showSymbol: false, lineStyle: { width: 2, color }, itemStyle: { color } }],
-  };
-}
-
-/* -------------------------------------------------------- components */
-function kpi(label, value, { unit = "", foot = "", tone = null, meter = null } = {}) {
+function kpi(label, value, { unit = "", foot = "", tone = null, meter = null, text = false } = {}) {
   const tag = tone ? `<span class="tag ${tone.dir > 0 ? "pos" : "neg"}">${icon(tone.dir > 0 ? "up" : "down")}${esc(tone.text)}</span>` : "";
   const m = meter ? `<div class="meter" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, meter.value * 100))}%;background:${meter.value >= meter.target ? T.gain : T.loss}"></span><i style="left:calc(${Math.max(0, Math.min(100, meter.target * 100))}% - 1px)"></i></div>` : "";
   return `<article class="kpi glass"><div class="kpi-label">${esc(label)}${unit ? `<span class="unit">${esc(unit)}</span>` : ""}</div>
-    <div class="kpi-value">${value}</div>${m}<div class="kpi-foot">${tag}${foot ? `<span>${foot}</span>` : ""}</div></article>`;
+    <div class="kpi-value${text ? " txt" : ""}">${value}</div>${m}<div class="kpi-foot">${tag}${foot ? `<span>${foot}</span>` : ""}</div></article>`;
 }
 function card(title, sub, body, span = "s12", head = "") {
   return `<section class="card glass ${span}"><div class="card-head"><div><h3 class="card-title">${esc(title)}</h3>${sub ? `<p class="card-sub">${sub}</p>` : ""}</div>${head}</div>${body}</section>`;
@@ -395,209 +304,169 @@ function sortRows(rows, { key, dir }) {
 }
 
 /* ------------------------------------------------------------- pages */
-function pageOverview(r) {
-  const s = r.summary, v = r.verdict, ccy = s.currency, be = s.breakeven_win_rate;
-  const verdict = `<section class="verdict glass ${v.tone}" aria-labelledby="vt">
+const pnlClass = (v) => (v >= 0 ? "pos" : "neg");
+const money0 = (v) => (isNum(v) && Math.abs(v) >= 100 ? fmt.money(v, 0) : fmt.money(v));
+function bwRow(r, dim) { return (r.best_worst || []).find((x) => x.dimension === dim); }
+function bwTile(label, entry, kind, ccy) {
+  if (!entry) return kpi(label, "–");
+  const e = entry[kind];
+  return kpi(label, esc(e.label), { text: true, foot: `<span class="dot ${pnlClass(e.net_pnl)}" aria-hidden="true"></span>${money0(e.net_pnl)} ${esc(ccy)} &middot; ${fmt.pct(e.win_rate)} win` });
+}
+function verdictBlock(r) {
+  const v = r.verdict, rc = r.recent || {}, ccy = r.summary.currency;
+  const stat = (label, val) => `<div class="vstat"><span>${label}</span><b><span class="dot ${pnlClass(val)}" aria-hidden="true"></span>${money0(val)}</b></div>`;
+  return `<section class="verdict glass ${v.tone}" aria-labelledby="vt">
     <div class="verdict-icon">${icon(v.tone === "positive" ? "check" : "alert")}</div>
     <div><h2 id="vt">${esc(v.title)}</h2><p>${esc(v.text)}</p></div>
-    <div class="verdict-stats">
-      <div class="vstat"><span>Before costs</span><b>${fmt.money(s.gross_pnl)}</b></div>
-      <div class="vstat"><span>Fees</span><b>${fmt.money(s.fees)}</b></div>
-      <div class="vstat"><span>Funding</span><b>${fmt.money(s.funding)}</b></div>
-      <div class="vstat"><span>Net result</span><b>${fmt.money(s.net_pnl)}</b></div>
+    <div class="verdict-stats" aria-label="Recent results in ${esc(ccy)}">
+      ${stat(`Last day (${fmt.date(rc.last_day, { month: "short", day: "numeric" })})`, rc.today)}${stat("Last 7 days", rc.d7)}${stat("Last 30 days", rc.d30)}
     </div></section>`;
+}
+function rankList(rows, ccy, { key = "symbol", n = 5 } = {}) {
+  const max = Math.max(...rows.map((d) => Math.abs(d.net_pnl)), 1e-9);
+  return `<ol class="rank">${rows.slice(0, n).map((d, i) => `<li><span class="rank-n">${i + 1}</span><span class="rank-name">${esc(d[key])}</span>
+    <span class="rank-bar"><i class="${pnlClass(d.net_pnl)}" style="width:${(Math.abs(d.net_pnl) / max) * 100}%"></i></span>
+    <span class="rank-val">${money0(d.net_pnl)}</span><span class="rank-sub">${fmt.int(d.trades)} trades, ${fmt.pct(d.win_rate)} win</span></li>`).join("")}</ol>`;
+}
+
+function pageOverview(r) {
+  const s = r.summary, ccy = s.currency, be = s.breakeven_win_rate, h = r.highlights || { working: [], costing: [] };
   const kpis = `<div class="kpis">
-    ${kpi("Net PnL", fmt.money(s.net_pnl), { unit: ccy, foot: `${fmt.int(s.trades)} closed trades` })}
-    ${kpi("Return on deposits", fmt.pct(s.return_on_deposits, 1, true), { foot: `${fmt.num(s.deposits)} ${ccy} deposited` })}
     ${kpi("Win rate", fmt.pct(s.win_rate), { meter: isNum(be) ? { value: s.win_rate, target: be } : null,
-        tone: isNum(be) ? { dir: s.win_rate >= be ? 1 : -1, text: `${fmt.pct(be)} needed` } : null })}
-    ${kpi("Profit factor", fmt.num(s.profit_factor), { tone: isNum(s.profit_factor) ? { dir: s.profit_factor >= 1 ? 1 : -1, text: s.profit_factor >= 1 ? "Wins exceed losses" : "Losses exceed wins" } : null })}
-    ${kpi("Expectancy per trade", fmt.money(s.expectancy, 3), { unit: ccy, foot: `Payoff ratio ${fmt.num(s.payoff_ratio)}` })}
-    ${kpi("Max drawdown", fmt.money(s.max_drawdown_usdt), { unit: ccy, foot: `${fmt.int(s.max_drawdown_days)} days under water` })}
+        foot: `${fmt.int(s.wins)} wins, ${fmt.int(s.losses)} losses${isNum(be) ? ` &middot; need ${fmt.pct(be)}` : ""}` })}
+    ${kpi("Average win / loss", `${fmt.money(s.avg_win)} <span class="kpi-sep">/</span> ${fmt.money(s.avg_loss)}`, { unit: ccy,
+        foot: isNum(s.payoff_ratio) ? `Wins are ${fmt.num(s.payoff_ratio, 1)}x the size of losses` : "" })}
+    ${kpi("Trades", fmt.int(s.trades), { foot: `${fmt.num(s.trades_per_active_day, 1)} per trading day &middot; ${fmt.int(s.symbols_traded)} coins` })}
+    ${kpi("Fees paid", fmt.num(-s.fees, 0), { unit: ccy, foot: s.net_pnl < 0 && s.fees < 0 ? `${fmt.pct(Math.min(1, -s.fees / Math.abs(s.net_pnl)))} of your net loss` : "" })}
+    ${kpi("Biggest drop", fmt.money(s.max_drawdown_usdt, 0), { unit: ccy, foot: "From your best point to your worst" })}
   </div>`;
-  const all = r.insights.slice(1).filter((t) => !t.startsWith("At this payoff ratio"));
-  const top = all.slice(0, 5), rest = all.slice(5);
-  const li = (t, i) => `<li><span class="n">${String(i + 1).padStart(2, "0")}</span><span>${esc(t)}</span></li>`;
-  const findings = card("Key findings", "Computed from the data, ordered by importance", `<ol class="findings">${top.map(li).join("")}</ol>` +
-    (rest.length ? `<details class="inline-acc"><summary>Show ${rest.length} more findings</summary><ol class="findings">${rest.map((t, i) => li(t, i + top.length)).join("")}</ol></details>` : ""));
-
+  const list = (items, kind) => items.length ? `<ul class="hl ${kind}">${items.map((t) => `<li>${icon(kind === "good" ? "check" : "alert")}<span>${esc(t)}</span></li>`).join("")}</ul>` : `<p class="note">Nothing stands out yet.</p>`;
+  const hl = `<section class="card glass s4"><h3 class="card-title">What's working</h3>${list(h.working, "good")}
+    <h3 class="card-title" style="margin-top:14px">What's costing you</h3>${list(h.costing, "bad")}</section>`;
+  const bw = r.best_worst || [];
+  const cell = (e) => `<b>${esc(e.label)}</b><span class="bw-v"><span class="dot ${pnlClass(e.net_pnl)}" aria-hidden="true"></span>${money0(e.net_pnl)}</span><span class="bw-s">${fmt.pct(e.win_rate)} win &middot; ${fmt.int(e.trades)} trades</span>`;
+  const bwTable = `<div class="bw" role="table" aria-label="Best and worst by category">
+    <div class="bw-row bw-head" role="row"><span role="columnheader"></span><span role="columnheader">Best</span><span role="columnheader">Worst</span></div>
+    ${bw.map((x) => `<div class="bw-row" role="row"><span class="bw-dim" role="rowheader">${esc(x.dimension)}</span><span class="bw-cell" role="cell">${cell(x.best)}</span><span class="bw-cell" role="cell">${cell(x.worst)}</span></div>`).join("")}</div>`;
   queueChart("c-cum", cumPnlChart(r.daily, ccy));
-  queueChart("c-wf", waterfallChart(r.waterfall, ccy));
   queueChart("c-daily", dailyPnlChart(r.daily, ccy));
-
-  return verdict + kpis +
-    card("Cumulative PnL", `Trading result over time, deposits and withdrawals excluded (${esc(ccy)})`, chartBox("c-cum", "tall", "Cumulative PnL line chart"), "s8") +
-    card("Where the money went", "Gross trading result, then costs", chartBox("c-wf", "tall", "PnL waterfall: gross, fees, funding, net"), "s4") +
-    findings +
-    accordion("Daily PnL", "Each day's result; drag the slider to zoom", chartBox("c-daily", "", "Daily PnL bar chart")) +
-    accordion("Deposits, costs and volume", "Account flows behind the numbers", `<div class="stat-grid">
-      ${[["Deposited", fmt.num(s.deposits)], ["Withdrawn", fmt.num(-s.withdrawals)], ["Fees paid", fmt.num(-s.fees)],
-         ["Funding", fmt.money(s.funding, 3)], ["Volume traded", fmt.num(s.volume, 0)], ["Effective fee rate", fmt.pct(s.effective_fee_rate, 3)],
-         ["Fees share of total loss", fmt.pct(s.fee_drag)], ["Time-weighted return", fmt.pct(s.twr, 1, true)], ["Active days", `${fmt.int(s.active_days)} of ${fmt.int(s.days)}`],
-         ["Trades per active day", fmt.num(s.trades_per_active_day, 1)], ["Open positions", fmt.int(s.open_positions)], ["Final balance", fmt.num(s.final_balance)]]
-        .map(([k, v]) => `<div class="stat"><span>${esc(k)}</span><b>${v}</b></div>`).join("")}</div>
-      <p class="note">Amounts in ${esc(ccy)}. Time-weighted return chains every event, so deposits don't inflate it; on an account that is topped up repeatedly it can approach ${MINUS}100%.</p>`);
+  return verdictBlock(r) + kpis +
+    card("Your PnL over time", `Running total after fees, deposits excluded (${esc(ccy)})`, chartBox("c-cum", "tall", "Cumulative PnL line chart"), "s8") + hl +
+    card("Best and worst", "Where you made and lost the most, by net PnL", bwTable) +
+    accordion("Daily results", "Each day's PnL; drag the slider to zoom", chartBox("c-daily", "", "Daily PnL bar chart"));
 }
 
-function pageEdge(r) {
-  const s = r.summary, ccy = s.currency, be = s.breakeven_win_rate;
-  const kpis = `<div class="kpis">
-    ${kpi("Average win", fmt.money(s.avg_win, 3), { unit: ccy })}
-    ${kpi("Average loss", fmt.money(s.avg_loss, 3), { unit: ccy })}
-    ${kpi("Payoff ratio", fmt.num(s.payoff_ratio), { foot: "Average win / average loss" })}
-    ${kpi("Break-even win rate", fmt.pct(be), { tone: isNum(be) ? { dir: s.win_rate >= be ? 1 : -1, text: `Actual ${fmt.pct(s.win_rate)}` } : null })}
-    ${kpi("Longest losing streak", fmt.int(s.max_loss_streak), { foot: `Longest winning streak ${fmt.int(s.max_win_streak)}` })}
-    ${kpi("Median hold", fmt.dur(s.median_hold_min), { foot: "Per closed trade" })}
-  </div>`;
-  const dur = r.by_duration;
-  queueChart("c-holdwin", winRateChart(dur, "hold", be));
-  queueChart("c-holdnet", bucketChart(dur, "hold", "net_pnl", { ccy }));
-  const tradeRows = rowsOf(r.trades);
-  const hist = histogramChart(tradeRows.map((t) => t.net_pnl), ccy);
-  if (hist) queueChart("c-hist", hist);
-
-  const dir = Object.fromEntries(r.by_direction.map((d) => [d.direction, d]));
-  const col = (name) => {
-    const d = dir[name];
-    if (!d) return `<div class="compare-col"><h4>${name}</h4><p class="note">No ${name.toLowerCase()} trades</p></div>`;
-    return `<div class="compare-col"><h4>${name}s</h4><dl>
-      <dt>Net PnL</dt><dd>${signed()(d.net_pnl)}</dd><dt>Trades</dt><dd>${fmt.int(d.trades)}</dd>
-      <dt>Win rate</dt><dd>${fmt.pct(d.win_rate)}</dd><dt>Avg per trade</dt><dd>${fmt.money(d.avg_pnl, 3)}</dd>
-      <dt>Fees</dt><dd>${fmt.money(d.fees)}</dd></dl></div>`;
-  };
-  const better = dir.Long && dir.Short ? (dir.Long.net_pnl >= dir.Short.net_pnl ? "Long" : "Short") : null;
-  const dirNote = better ? `<p class="note">${better}s ${dir[better].net_pnl > 0 ? "made more" : "lost less"} in this period.</p>` : "";
-
-  if (r.by_size.length) queueChart("c-size", bucketChart(r.by_size, "size_bucket", "net_pnl", { ccy }));
-  const pts = tradeRows.filter((t) => isNum(t.duration_min) && t.duration_min > 0).map((t) => [t.duration_min, t.net_pnl, t.symbol]);
-  queueChart("c-scatter", scatterChart(pts, { xName: "Holding time (minutes, log scale)", yName: `Net PnL (${ccy})`, xLog: true, xFmt: (v) => fmt.dur(v), ccy,
-    tip: (p) => ttHead(p.value[2]) + ttRow("Held", fmt.dur(p.value[0])) + ttRow("Net PnL", `${fmt.money(p.value[1], 3)} ${ccy}`) }));
-  const wl = r.hold_winners_losers;
-
+function localOffsetHours() { return -new Date().getTimezoneOffset() / 60; }
+function hourRows(rows) {
+  const off = localOffsetHours();
+  if (!state.ui.localTime || !Number.isInteger(off) || off === 0) return rows;
+  return [...rows].map((r) => ({ ...r, hour: (r.hour + off + 24) % 24 })).sort((a, b) => a.hour - b.hour);
+}
+function pageTiming(r) {
+  const ccy = r.summary.currency, be = r.summary.breakeven_win_rate, m = r.market_weekdays || {};
+  const hour = bwRow(r, "Hour of day (UTC)"), day = bwRow(r, "Day of week"), ses = bwRow(r, "Session");
+  const kpis = `<div class="kpis">${bwTile("Best hour (UTC)", hour, "best", ccy)}${bwTile("Worst hour (UTC)", hour, "worst", ccy)}
+    ${bwTile("Best day", day, "best", ccy)}${bwTile("Worst day", day, "worst", ccy)}${bwTile("Best session", ses, "best", ccy)}</div>`;
+  const off = localOffsetHours(), canLocal = Number.isInteger(off) && off !== 0;
+  const tz = canLocal ? `<div class="mini-seg" role="group" aria-label="Time zone"><button class="btn" type="button" data-tz="utc" aria-pressed="${!state.ui.localTime}">UTC</button>
+    <button class="btn" type="button" data-tz="local" aria-pressed="${!!state.ui.localTime}">Your time (UTC${off > 0 ? "+" : ""}${off})</button></div>` : "";
+  const hrs = hourRows(r.by_hour).filter((d) => d.trades > 0);
+  queueChart("c-hour", bucketChart(hrs, "hour", "net_pnl", { ccy, labelFmt: (h) => String(h).padStart(2, "0") }));
+  queueChart("c-wd", bucketChart(r.by_weekday, "weekday", "net_pnl", { ccy, labelFmt: (d) => d.slice(0, 3) }));
+  let market = `<p class="note">BTC candles aren't available for this data source.</p>`;
+  if (m.available) {
+    queueChart("c-mkt", {
+      xAxis: catAxis(m.rows.map((d) => d.weekday.slice(0, 3))), yAxis: valueAxis((v) => fmt.pct(v, 1)),
+      tooltip: { trigger: "item", formatter: (p) => { const d = m.rows[p.dataIndex]; return ttHead(`${d.weekday}, ${m.symbol.replace("USDT", "")}`) + ttRow("Average move", fmt.pct(d.avg_return, 2, true)) + ttRow("Green days", fmt.pct(d.up_share)) + ttRow("Days measured", fmt.int(d.days)); } },
+      series: [{ type: "bar", barMaxWidth: 34, data: m.rows.map((d) => signBar(d.avg_return)), markLine: zeroLine }],
+    });
+    market = chartBox("c-mkt", "", "Average BTC daily move by weekday");
+  }
+  const mSub = m.available ? `Bitcoin's average daily move${m.widened ? " over all available history" : ` over ${m.weeks} weeks`}. Pumps most on <b>${esc(m.pump)}</b> (${fmt.pct(m.pump_avg, 2, true)}, ${fmt.pct(m.pump_up)} green), dumps most on <b>${esc(m.dump)}</b> (${fmt.pct(m.dump_avg, 2, true)}).` : "";
+  const sessions = `<div class="sessions">${r.by_session.map((x) => `<div class="session ${pnlClass(x.net_pnl)}"><div class="row-between"><b>${esc(x.session)}</b><span class="note">${esc(x.hours)} UTC</span></div>
+    <div class="session-v">${money0(x.net_pnl)} <small>${esc(ccy)}</small></div><div class="note">${fmt.pct(x.win_rate)} win &middot; ${fmt.int(x.trades)} trades</div></div>`).join("")}</div>`;
+  queueChart("c-heat", heatmapChart(r.by_hour_weekday, ccy));
   return kpis +
-    card("Win rate by holding time", "Bars above the dashed line beat the break-even win rate", chartBox("c-holdwin", "", "Win rate by holding time"), "s6") +
-    card("Net PnL by holding time", `Which holding periods made or lost money (${esc(ccy)})`, chartBox("c-holdnet", "", "Net PnL by holding time"), "s6") +
-    card("Distribution of trade results", `Net PnL per trade; outer 1% folded into the end bars (${esc(ccy)})`, hist ? chartBox("c-hist", "", "Histogram of trade PnL") : "<p class='note'>No trades</p>", "s7") +
-    card("Longs vs shorts", "Directional bias", `<div class="compare">${col("Long")}${col("Short")}</div>${dirNote}`, "s5") +
-    accordion("Do winners and losers get held differently?", "Median and mean holding time", table(
-      [{ key: "outcome", label: "Outcome" }, { key: "count", label: "Trades", num: true, fmt: fmt.int }, { key: "median", label: "Median hold", num: true, fmt: fmt.dur }, { key: "mean", label: "Mean hold", num: true, fmt: fmt.dur }], wl)) +
-    accordion("Does position size help or hurt?", "Entry notional split into quintiles", r.by_size.length ? chartBox("c-size", "", "Net PnL by position size quintile") : "<p class='note'>Not enough trades.</p>") +
-    accordion("Every trade: holding time vs result", `${fmt.int(pts.length)} trades`, chartBox("c-scatter", "tall", "Scatter of holding time against trade PnL"));
+    card("Your results by hour", `Net PnL of trades opened in each hour (${esc(ccy)}). Hover for win rate.`, chartBox("c-hour", "", "Net PnL by hour opened"), "s12", tz) +
+    card("Your results by day", `Net PnL of trades opened on each weekday (${esc(ccy)})`, chartBox("c-wd", "", "Net PnL by weekday"), "s6") +
+    card("When the market pumps and dumps", mSub, market, "s6") +
+    card("Trading sessions", "Asia, London and New York, by when the trade was opened", sessions) +
+    accordion("Day and hour combined", "Every weekday and hour on one grid, UTC", chartBox("c-heat", "tall", "Heatmap of PnL by weekday and hour")) +
+    (isNum(be) ? "" : "");
 }
 
-function pageSymbols(r) {
-  const s = r.summary, ccy = s.currency, sym = r.by_symbol, conc = r.loss_concentration;
-  const sorted = [...sym].sort((a, b) => b.net_pnl - a.net_pnl);
-  const best = sorted[0], worst = sorted[sorted.length - 1];
+function pageAssets(r) {
+  const ccy = r.summary.currency, ac = r.by_asset_class || [], sym = r.by_symbol || [];
+  const most = [...ac].sort((a, b) => b.trades - a.trades)[0];
+  const cls = bwRow(r, "Asset class"), coin = bwRow(r, "Coin");
   const kpis = `<div class="kpis">
-    ${kpi("Symbols traded", fmt.int(sym.length))}
-    ${kpi("Net profitable", `${fmt.int(conc.winning_symbols)}`, { foot: `of ${fmt.int(sym.length)} symbols` })}
-    ${kpi("Top 5 share of losses", fmt.pct(conc.share), { foot: "Loss concentration" })}
-    ${kpi("Best symbol", esc(best?.symbol ?? "–"), { foot: best ? `${fmt.money(best.net_pnl)} ${ccy}` : "" })}
-    ${kpi("Worst symbol", esc(worst?.symbol ?? "–"), { foot: worst ? `${fmt.money(worst.net_pnl)} ${ccy}` : "" })}
-  </div>`;
-  const winners = sorted.filter((x) => x.net_pnl > 0).slice(0, 8);
-  const losers = sorted.filter((x) => x.net_pnl < 0).slice(-8);
-  const extremes = [...winners, ...losers];
-  queueChart("c-sym", bucketChart(extremes, "symbol", "net_pnl", { ccy, horizontal: true }));
-  const tl = r.top_losers;
-  queueChart("c-share", {
-    xAxis: valueAxis((v) => `${Math.round(v * 100)}%`), yAxis: catAxis(tl.map((d) => d.symbol), { inverse: true, axisLabel: { color: T.text2, fontSize: 11 } }),
-    grid: { left: 6, right: 44, top: 6, bottom: 6, containLabel: true },
-    tooltip: { trigger: "item", formatter: (p) => { const d = tl[p.dataIndex]; return ttHead(d.symbol) + ttRow("Share of losses", fmt.pct(d.share, 1)) + ttRow("Net PnL", `${fmt.money(d.net_pnl)} ${ccy}`) + ttRow("Trades", fmt.int(d.trades)); } },
-    series: [{ type: "bar", data: tl.map((d) => ({ value: d.share, itemStyle: { color: T.loss, borderRadius: [0, 4, 4, 0] } })), barMaxWidth: 14,
+    ${kpi("Most traded", esc(most?.asset_class ?? "–"), { text: true, foot: most ? `${fmt.pct(most.share)} of your trades` : "" })}
+    ${bwTile("Best asset class", cls, "best", ccy)}${bwTile("Worst asset class", cls, "worst", ccy)}
+    ${bwTile("Best coin", coin, "best", ccy)}${bwTile("Worst coin", coin, "worst", ccy)}</div>`;
+  const byPnl = [...ac].sort((a, b) => b.net_pnl - a.net_pnl);
+  queueChart("c-acpnl", bucketChart(byPnl, "asset_class", "net_pnl", { ccy, horizontal: true }));
+  const byCount = [...ac].sort((a, b) => b.trades - a.trades);
+  queueChart("c-account", {
+    xAxis: valueAxis((v) => `${Math.round(v * 100)}%`), yAxis: catAxis(byCount.map((d) => d.asset_class), { inverse: true, axisLabel: { color: T.text2, fontSize: 11 } }),
+    grid: { left: 6, right: 48, top: 6, bottom: 6, containLabel: true },
+    tooltip: { trigger: "item", formatter: (p) => { const d = byCount[p.dataIndex]; return ttHead(d.asset_class) + ttRow("Share of trades", fmt.pct(d.share, 1)) + ttRow("Trades", fmt.int(d.trades)) + ttRow("Coins", fmt.int(d.symbols)); } },
+    series: [{ type: "bar", barMaxWidth: 16, data: byCount.map((d) => ({ value: d.share, itemStyle: { color: T.accent, borderRadius: [0, 4, 4, 0] } })),
       label: { show: true, position: "right", color: T.text2, fontSize: 11, formatter: (p) => fmt.pct(p.value) } }],
   });
-  const pts = sym.map((d) => [d.trades, d.net_pnl, d.symbol]);
-  queueChart("c-symscatter", scatterChart(pts, { xName: "Trades (log scale)", yName: `Net PnL (${ccy})`, xLog: true, xFmt: fmt.int, ccy,
-    tip: (p) => ttHead(p.value[2]) + ttRow("Trades", fmt.int(p.value[0])) + ttRow("Net PnL", `${fmt.money(p.value[1])} ${ccy}`) }));
-  const cols = [
-    { key: "symbol", label: "Symbol" }, { key: "trades", label: "Trades", num: true, fmt: fmt.int },
-    { key: "net_pnl", label: "Net PnL", num: true, fmt: signed() }, { key: "avg_pnl", label: "Avg / trade", num: true, fmt: (v) => fmt.money(v, 3) },
-    { key: "win_rate", label: "Win rate", num: true, fmt: (v) => fmt.pct(v) }, { key: "fees", label: "Fees", num: true, fmt: (v) => fmt.money(v) },
-    { key: "volume", label: "Volume", num: true, fmt: (v) => fmt.num(v, 0) }, { key: "liquidations", label: "Liquidations", num: true, fmt: fmt.int },
-    { key: "median_hold_min", label: "Median hold", num: true, fmt: fmt.dur },
+  const classCols = [
+    { key: "asset_class", label: "Asset class" }, { key: "trades", label: "Trades", num: true, fmt: fmt.int },
+    { key: "win_rate", label: "Win rate", num: true, fmt: (v) => fmt.pct(v) }, { key: "net_pnl", label: "Net PnL", num: true, fmt: signed(0) },
+    { key: "best_symbol", label: "Best coin" }, { key: "worst_symbol", label: "Worst coin", fmt: (v, r) => (v === r.best_symbol ? "–" : esc(v)) },
+  ];
+  const sorted = [...sym].sort((a, b) => b.net_pnl - a.net_pnl);
+  const top = sorted.filter((d) => d.net_pnl > 0), bottom = sorted.filter((d) => d.net_pnl < 0).reverse();
+  const dir = Object.fromEntries((r.by_direction || []).map((d) => [d.direction, d]));
+  const side = (name) => { const d = dir[name]; return d ? `<div class="session ${pnlClass(d.net_pnl)}"><b>${name}s</b><div class="session-v">${money0(d.net_pnl)} <small>${esc(ccy)}</small></div><div class="note">${fmt.pct(d.win_rate)} win &middot; ${fmt.int(d.trades)} trades</div></div>` : ""; };
+  const symCols = [
+    { key: "symbol", label: "Coin" }, { key: "trades", label: "Trades", num: true, fmt: fmt.int },
+    { key: "net_pnl", label: "Net PnL", num: true, fmt: signed() }, { key: "win_rate", label: "Win rate", num: true, fmt: (v) => fmt.pct(v) },
+    { key: "fees", label: "Fees", num: true, fmt: (v) => fmt.money(v) }, { key: "median_hold_min", label: "Typical hold", num: true, fmt: fmt.dur },
   ];
   return kpis +
-    card("Biggest winners and losers", `Top ${winners.length} and bottom ${losers.length} symbols by net PnL (${esc(ccy)})`, chartBox("c-sym", "tall", "Horizontal bars of best and worst symbols"), "s7") +
-    card("Where the losses concentrate", "Share of all losing-symbol PnL", chartBox("c-share", "tall", "Share of losses by symbol"), "s5") +
-    accordion("Does trading a symbol more often help?", "Trades vs net PnL per symbol", chartBox("c-symscatter", "tall", "Scatter of trade count against PnL per symbol")) +
-    accordion("All symbols", `${fmt.int(sym.length)} symbols, sortable`, `<div id="symTable">${table(cols, sortRows(sym, state.ui.symSort), { sort: state.ui.symSort, sortId: "sym" })}</div>`);
+    card("Profit by asset class", `Net PnL after fees (${esc(ccy)})`, chartBox("c-acpnl", "", "Net PnL by asset class"), "s6") +
+    card("What you trade most", "Share of your trades in each asset class", chartBox("c-account", "", "Share of trades by asset class"), "s6") +
+    card("Asset classes at a glance", "", table(classCols, byPnl)) +
+    card("Top coins", "Most profitable", top.length ? rankList(top, ccy) : `<p class="note">No profitable coins in this period.</p>`, "s6") +
+    card("Bottom coins", "Biggest losses", bottom.length ? rankList(bottom, ccy) : `<p class="note">No losing coins in this period.</p>`, "s6") +
+    card("Longs vs shorts", "", `<div class="sessions two">${side("Long")}${side("Short")}</div>`) +
+    accordion("Every coin", `${fmt.int(sym.length)} coins, click a column to sort`, `<div id="symTable">${table(symCols, sortRows(sym, state.ui.symSort), { sort: state.ui.symSort, sortId: "sym" })}</div>`);
 }
 
-function pageTiming(r) {
-  const s = r.summary, ccy = s.currency, be = s.breakeven_win_rate, ot = r.overtrading;
-  queueChart("c-heat", heatmapChart(r.by_hour_weekday, ccy));
+function pageHabits(r) {
+  const s = r.summary, ccy = s.currency, be = s.breakeven_win_rate, h = r.highlights || { costing: [] };
+  const hold = r.by_holding_time || [];
+  const holdLine = h.costing.find((t) => t.startsWith("Trades closed")) || (r.highlights.working || []).find((t) => t.startsWith("Trades held")) || "";
+  queueChart("c-holdnet", bucketChart(hold, "hold", "net_pnl", { ccy }));
+  queueChart("c-holdwin", winRateChart(hold, "hold", be));
   const tiltOrder = (c) => (c.startsWith("≤") && c.includes("loss") ? 0 : c.startsWith("≤") ? 1 : 2);
-  const tilt = [...r.tilt].sort((a, b) => tiltOrder(a.context) - tiltOrder(b.context));
-  queueChart("c-tilt", bucketChart(tilt, "context", "avg_pnl", { ccy, valueFmt: (v) => fmt.money(v, 3) }));
-  queueChart("c-ot", bucketChart(ot.buckets, "trade_bucket", "avg_pnl", { ccy, labelFmt: (x) => `${x} trades` }));
-  queueChart("c-hour", bucketChart(r.by_hour, "hour", "net_pnl", { ccy, labelFmt: (h) => String(h).padStart(2, "0") }));
-  queueChart("c-otscatter", scatterChart(ot.days.map((d) => [d.trades, d.pnl, d.date]), { xName: "Trades closed that day", yName: `Daily PnL (${ccy})`, xFmt: fmt.int, ccy,
-    tip: (p) => ttHead(fmt.date(p.value[2])) + ttRow("Trades", fmt.int(p.value[0])) + ttRow("PnL", `${fmt.money(p.value[1])} ${ccy}`) }));
+  const tilt = [...(r.tilt || [])].sort((a, b) => tiltOrder(a.context) - tiltOrder(b.context));
+  const tiltLabel = (c) => c.replace(/^≤(\d+)m after a loss$/, "Within $1 min of a loss").replace(/^≤(\d+)m after a win$/, "Within $1 min of a win").replace(/^>(\d+)m since last trade$/, "After a break");
+  const tiltRows = tilt.map((t) => ({ ...t, context: tiltLabel(t.context) }));
+  queueChart("c-tilt", winRateChart(tiltRows, "context", be));
+  const busy = r.busy_days || [];
+  queueChart("c-busy", bucketChart(busy, "trade_bucket", "avg_pnl", { ccy, labelFmt: (x) => `${x} trades` }));
   const w = state.f.tilt;
   const seg = `<div class="mini-seg" role="group" aria-label="Minutes after previous trade">${[5, 15, 30, 60].map((m) => `<button class="btn" type="button" data-tilt="${m}" aria-pressed="${m === w}">${m}m</button>`).join("")}</div>`;
-  const corr = ot.corr;
-  const corrText = isNum(corr) ? `Correlation between trades per day and daily PnL: <b>${fmt.num(corr, 2, true)}</b>${corr < -0.3 ? ", so busier days are worse days." : "."}` : "";
-  const tiltCols = [{ key: "context", label: "Context" }, { key: "trades", label: "Trades", num: true, fmt: fmt.int }, { key: "avg_pnl", label: "Avg / trade", num: true, fmt: (v) => fmt.money(v, 3) },
-    { key: "win_rate", label: "Win rate", num: true, fmt: (v) => fmt.pct(v) }, { key: "net_pnl", label: "Net PnL", num: true, fmt: signed() }];
-  return card("When trades are opened", `Net PnL by weekday and hour opened, UTC (${esc(ccy)}). Blue is gain, red is loss.`, chartBox("c-heat", "tall", "Heatmap of PnL by weekday and hour"), "s12") +
-    card("Tilt check: trading right after a loss", `Average PnL per trade, by what happened just before`, chartBox("c-tilt", "", "Average PnL by context after previous trade"), "s6", seg) +
-    card("Overtrading: busy days vs results", corrText || "Average daily PnL by trades that day", chartBox("c-ot", "", "Average daily PnL by trades per day"), "s6") +
-    accordion("Net PnL by hour opened", "UTC, all weekdays combined", chartBox("c-hour", "", "Net PnL by hour")) +
-    accordion("Every active day: trades vs PnL", `${fmt.int(ot.days.length)} days`, chartBox("c-otscatter", "tall", "Scatter of trades per day against daily PnL")) +
-    accordion("Tilt check detail", `Window: ${w} minutes after the previous trade closed`, table(tiltCols, tilt) + (isNum(be) ? `<p class="note">Break-even win rate at the overall payoff ratio: ${fmt.pct(be)}.</p>` : ""));
-}
-
-function pageRisk(r) {
-  const s = r.summary, ccy = s.currency, be = s.breakeven_win_rate;
+  const lev = r.by_leverage || [];
+  if (lev.length) queueChart("c-lev", bucketChart(lev, "lev_bucket", "net_pnl", { ccy }));
+  const typical = fmt.dur(s.median_hold_min);
   const kpis = `<div class="kpis">
-    ${kpi("Max drawdown", fmt.money(s.max_drawdown_usdt), { unit: ccy, foot: "Largest fall from peak cumulative PnL" })}
-    ${kpi("Longest drawdown", `${fmt.int(s.max_drawdown_days)} days`, { foot: "Below a previous peak" })}
-    ${kpi("Worst day", fmt.money(s.worst_day), { unit: ccy, foot: `Best day ${fmt.money(s.best_day)}` })}
-    ${kpi("Liquidations", fmt.int(s.liquidations), { foot: `Cost ${fmt.money(s.liquidation_pnl)} ${ccy}` })}
-    ${kpi("Green days", fmt.pct(s.green_day_rate), { foot: "Of active days" })}
-    ${kpi("Sharpe ratio", fmt.num(s.sharpe_daily_ann), { foot: "Daily returns, annualised" })}
+    ${kpi("Typical hold", typical, { foot: "Half your trades close faster" })}
+    ${kpi("Trades per day", fmt.num(s.trades_per_active_day, 1), { foot: "On days you trade" })}
+    ${kpi("Longest losing streak", fmt.int(s.max_loss_streak), { foot: `Longest winning streak ${fmt.int(s.max_win_streak)}` })}
+    ${kpi("Liquidations", fmt.int(s.liquidations), { foot: s.liquidations ? `Cost ${fmt.num(-s.liquidation_pnl, 0)} ${esc(ccy)}` : "None" })}
   </div>`;
-  queueChart("c-dd", drawdownChart(r.daily, ccy));
-  const lev = r.by_leverage;
-  if (lev.length) {
-    queueChart("c-lev", bucketChart(lev, "lev_bucket", "net_pnl", { ccy }));
-    queueChart("c-levwin", winRateChart(lev, "lev_bucket", be));
-  }
-  const liq = rowsOf(r.liquidations);
-  const liqCols = [{ key: "symbol", label: "Symbol" }, { key: "direction", label: "Side" }, { key: "open_time", label: "Opened", fmt: fmt.dateTime },
-    { key: "duration_min", label: "Held", num: true, fmt: fmt.dur }, { key: "entry_notional", label: "Notional", num: true, fmt: (v) => fmt.num(v) },
-    { key: "net_pnl", label: "Net PnL", num: true, fmt: signed() }];
   return kpis +
-    card("Drawdown", `Distance below the previous peak of cumulative PnL (${esc(ccy)})`, chartBox("c-dd", "tall", "Drawdown area chart"), lev.length ? "s8" : "s12") +
-    (lev.length ? card("Leverage", "Net PnL by leverage used (closed-PnL API)", chartBox("c-lev", "tall", "Net PnL by leverage bucket"), "s4") : "") +
-    accordion("Liquidated positions", liq.length ? `${fmt.int(liq.length)} positions, ${liq.length > 200 ? "worst 200 shown" : "worst first"}` : "None in this period",
-      liq.length ? table(liqCols, liq, { maxRows: 200 }) : "<p class='note'>No liquidations in this period.</p>") +
-    (lev.length ? accordion("Win rate by leverage", "Against the break-even win rate", chartBox("c-levwin", "", "Win rate by leverage")) :
-      accordion("Leverage", "Needs API data", "<p class='note'>Leverage comes from the closed-PnL endpoint, which CSV exports don't include.</p>"));
-}
-
-function pageMarket(r) {
-  const m = r.market, ccy = r.summary.currency;
-  if (!m.available) return emptyState("No market data for this period", "BTC daily candles are fetched from Bybit's public API. They appear after a sync, or once the server can reach Bybit.");
-  const kpis = `<div class="kpis">
-    ${kpi("Correlation with BTC", fmt.num(m.corr, 2, true), { foot: "Daily PnL vs BTC daily return" })}
-    ${kpi("Avg PnL on BTC up days", fmt.money(m.up_avg), { unit: ccy })}
-    ${kpi("Avg PnL on BTC down days", fmt.money(m.down_avg), { unit: ccy })}
-  </div>`;
-  const pts = m.days.filter((d) => isNum(d.btc_return)).map((d) => [d.btc_return, d.pnl, d.date]);
-  queueChart("c-mscatter", scatterChart(pts, { xName: "BTC daily return", yName: `Daily PnL (${ccy})`, xFmt: (v) => fmt.pct(v, 0), ccy,
-    tip: (p) => ttHead(fmt.date(p.value[2])) + ttRow("BTC", fmt.pct(p.value[0], 1, true)) + ttRow("Your PnL", `${fmt.money(p.value[1])} ${ccy}`) }));
-  queueChart("c-move", bucketChart(m.by_move, "btc_move", "avg_pnl", { ccy, labelFmt: (x) => x.replace("..", " to ") }));
-  queueChart("c-vol", bucketChart(m.by_vol, "btc_vol", "avg_pnl", { ccy }));
-  queueChart("c-btc", lineChart(m.days.map((d) => [d.date, d.close]), T.accent, "BTC close"));
-  queueChart("c-mpnl", dailyPnlChart(m.days.map((d) => ({ ...d, gross: null, fees: null, funding: null })), ccy));
-  return kpis +
-    card("Your daily PnL vs Bitcoin's move", "Each dot is an active trading day", chartBox("c-mscatter", "tall", "Scatter of BTC return against daily PnL"), "s7") +
-    card("Average day by BTC move", `Average daily PnL (${esc(ccy)})`, chartBox("c-move", "tall", "Average PnL by BTC daily move"), "s5") +
-    accordion("Average day by BTC volatility", "BTC intraday range, split in thirds", chartBox("c-vol", "", "Average PnL by BTC volatility")) +
-    accordion("BTC price and your daily PnL", "Same dates, two separate scales", chartBox("c-btc", "short", "BTC closing price") + chartBox("c-mpnl", "short", "Daily PnL on active days"));
+    card("How long you hold", esc(holdLine) || `Net PnL by holding time (${esc(ccy)})`, chartBox("c-holdnet", "", "Net PnL by holding time"), "s6") +
+    card("Win rate by holding time", "Bars above the dashed line win often enough to make money", chartBox("c-holdwin", "", "Win rate by holding time"), "s6") +
+    card("Trading right after a loss", "Win rate of trades opened soon after the previous one closed", chartBox("c-tilt", "", "Win rate after a loss, after a win and after a break"), "s6", seg) +
+    card("Busy days", "Average result of a day, by how many trades you made", chartBox("c-busy", "", "Average daily PnL by trades per day"), "s6") +
+    (lev.length ? accordion("Leverage", "Net PnL by the leverage you used", chartBox("c-lev", "", "Net PnL by leverage")) : "");
 }
 
 const TRADE_COLS = [
@@ -642,7 +511,7 @@ function pageTrades(r) {
       <p class="note" style="font-size:13px;color:var(--text-2)">Positions already open when the data starts count toward PnL, not toward holding-time or size statistics. Drawdown is measured in ${esc(r.summary.currency)}, not percent, because deposits distort percentages.</p></div>`);
 }
 
-const PAGE_RENDER = { overview: pageOverview, edge: pageEdge, symbols: pageSymbols, timing: pageTiming, risk: pageRisk, market: pageMarket, trades: pageTrades };
+const PAGE_RENDER = { overview: pageOverview, timing: pageTiming, assets: pageAssets, habits: pageHabits, trades: pageTrades };
 
 /* ------------------------------------------------------------ render */
 const view = $("#view");
@@ -889,7 +758,8 @@ document.addEventListener("click", (e) => {
     state.f.start = k === "all" ? null : fmt.iso(meta.data_end - (Number(k) - 1) * 864e5);
     state.f.end = null;
     renderFilters(); filtersChanged();
-  } else if (t.dataset.tilt) { state.f.tilt = Number(t.dataset.tilt); filtersChanged(); }
+  } else if (t.dataset.tz) { state.ui.localTime = t.dataset.tz === "local"; renderView(); }
+  else if (t.dataset.tilt) { state.f.tilt = Number(t.dataset.tilt); filtersChanged(); }
   else if (t.dataset.outcome) { state.ui.tradeOutcome = t.dataset.outcome; state.ui.tradePage = 0; renderView(); }
   else if (t.dataset.pg) { state.ui.tradePage += Number(t.dataset.pg); $("#tradeTable").innerHTML = tradesTable(state.report); }
   else if (t.dataset.sort) {
